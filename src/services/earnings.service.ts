@@ -141,7 +141,7 @@ export const getLawyerWallet = async (lawyerId: string): Promise<LawyerWallet | 
 /**
  * Subscribe to wallet updates
  */
-export const subscribeToWallet = (
+export const subscribeToLawyerWallet = (
   lawyerId: string,
   callback: (wallet: LawyerWallet | null) => void
 ): Unsubscribe => {

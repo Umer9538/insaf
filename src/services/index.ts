@@ -32,3 +32,7 @@ export * from './analytics.service';
 
 // Push Notifications (Expo)
 export * from './notification.service';
+
+// AI Services (Law Coach & Law Assistant)
+export * from './ai.service';
+

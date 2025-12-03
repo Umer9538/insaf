@@ -131,15 +131,23 @@ export const HomeScreen: React.FC = () => {
               {user?.displayName || 'User'}
             </Text>
           </View>
-          <TouchableOpacity
-            style={styles.notificationButton}
-            onPress={() => navigation.navigate('Notifications')}
-          >
-            <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
-            <View style={styles.notificationBadge}>
-              <Text variant="caption" style={styles.badgeText}>3</Text>
-            </View>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <TouchableOpacity
+              style={styles.notificationButton}
+              onPress={() => navigation.navigate('AIChatList')}
+            >
+              <Ionicons name="chatbubbles-outline" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.notificationButton}
+              onPress={() => navigation.navigate('Notifications')}
+            >
+              <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
+              <View style={styles.notificationBadge}>
+                <Text variant="caption" style={styles.badgeText}>3</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
         </Animated.View>
 
         {/* Stats Cards */}

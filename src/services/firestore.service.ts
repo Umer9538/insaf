@@ -36,6 +36,8 @@ export const COLLECTIONS = {
   REVIEWS: 'reviews',
   NOTIFICATIONS: 'notifications',
   DISPUTES: 'disputes',
+  AI_MESSAGES: 'aiMessages', // AI chatbot messages
+  AI_SESSIONS: 'aiSessions', // AI chat sessions
 } as const;
 
 // Generic CRUD operations

@@ -19,6 +19,8 @@ import { LawyersScreen } from '../screens/main/LawyersScreen';
 import { CasesScreen } from '../screens/main/CasesScreen';
 import { ChatScreen } from '../screens/main/ChatScreen';
 import { ProfileScreen } from '../screens/main/ProfileScreen';
+import { AIChatListScreen } from '../screens/main/AIChatListScreen';
+import { LawCoachScreen } from '../screens/main/LawCoachScreen';
 
 // Detail Screens
 import { LawyerDetailScreen } from '../screens/detail/LawyerDetailScreen';
@@ -187,6 +189,16 @@ export const MainNavigator: React.FC = () => {
         name="Notifications"
         component={NotificationsScreen}
         options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="AIChatList"
+        component={AIChatListScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="LawCoach"
+        component={LawCoachScreen}
+        options={{ animation: 'slide_from_bottom' }}
       />
 
       {/* Settings Screens */}

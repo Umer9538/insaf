@@ -45,6 +45,8 @@ export type MainStackParamList = {
   Support: undefined;
   Terms: undefined;
   Privacy: undefined;
+  AIChatList: undefined;
+  LawCoach: { sessionId?: string };
 };
 
 // Lawyer Tab Navigator
@@ -83,7 +85,6 @@ export type RootStackParamList = {
   Lawyer: NavigatorScreenParams<LawyerStackParamList>;
   Onboarding: undefined;
   // Modal screens
-  LawCoach: undefined;
   DocumentViewer: { documentUrl: string; title?: string };
   BookConsultation: { lawyerId: string };
 };
@@ -91,6 +92,6 @@ export type RootStackParamList = {
 // Global navigation types
 declare global {
   namespace ReactNavigation {
-    interface RootParamList extends RootStackParamList {}
+    interface RootParamList extends RootStackParamList { }
   }
 }
