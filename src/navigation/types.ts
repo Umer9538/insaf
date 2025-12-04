@@ -30,9 +30,10 @@ export type MainStackParamList = {
   MainTabs: undefined;
   LawyerDetail: { lawyerId: string };
   CaseDetail: { caseId: string };
-  ChatDetail: { conversationId: string };
-  CreateCase: undefined;
+  ChatDetail: { chatId: string; userName: string; userAvatar?: string };
   Notifications: undefined;
+  AIChatList: { chatType?: 'LAW_COACH' | 'LAW_ASSISTANT'; targetScreen?: string } | undefined;
+  LawAssistant: { sessionId?: string } | undefined;
   // Settings screens
   EditProfile: undefined;
   Verification: undefined;
@@ -45,8 +46,7 @@ export type MainStackParamList = {
   Support: undefined;
   Terms: undefined;
   Privacy: undefined;
-  AIChatList: undefined;
-  LawCoach: { sessionId?: string };
+  LawCoach: { sessionId?: string } | undefined;
 };
 
 // Lawyer Tab Navigator
@@ -67,6 +67,8 @@ export type LawyerStackParamList = {
   LawyerEarnings: undefined;
   LawyerProfileEdit: undefined;
   Notifications: undefined;
+  AIChatList: { chatType?: 'LAW_COACH' | 'LAW_ASSISTANT'; targetScreen?: string } | undefined;
+  LawAssistant: { sessionId?: string } | undefined;
   // Settings screens
   Wallet: undefined;
   Transactions: undefined;

@@ -235,8 +235,12 @@ const callGemini = async (messages: any[]): Promise<AIResponse> => {
         const systemContext = messages.find((m) => m.role === 'system')?.content || '';
         const fullPrompt = `${systemContext}\n\n${prompt}\n\nAssistant:`;
 
+        // Dynamic URL construction using the configured model
+        const baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models';
+        const url = `${baseUrl}/${AI_CONFIG.model}:generateContent?key=${AI_CONFIG.apiKey}`;
+
         const response = await fetch(
-            `${AI_ENDPOINTS.gemini}?key=${AI_CONFIG.apiKey}`,
+            url,
             {
                 method: 'POST',
                 headers: {

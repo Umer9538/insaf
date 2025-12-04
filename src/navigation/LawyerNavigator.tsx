@@ -21,6 +21,8 @@ import { MyBidsScreen } from '../screens/lawyer/MyBidsScreen';
 // Shared Screens
 import { ChatScreen } from '../screens/main/ChatScreen';
 import { ProfileScreen } from '../screens/main/ProfileScreen';
+import { AIChatListScreen } from '../screens/main/AIChatListScreen';
+import { LawAssistantScreen } from '../screens/lawyer/LawAssistantScreen';
 
 // Detail Screens
 import { CaseDetailScreen } from '../screens/detail/CaseDetailScreen';
@@ -197,6 +199,16 @@ export const LawyerNavigator: React.FC = () => {
         name="Notifications"
         component={NotificationsScreen}
         options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="AIChatList"
+        component={AIChatListScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="LawAssistant"
+        component={LawAssistantScreen}
+        options={{ animation: 'slide_from_bottom' }}
       />
 
       {/* Settings Screens */}

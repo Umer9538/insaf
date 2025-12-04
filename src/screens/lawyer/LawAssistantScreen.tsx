@@ -36,6 +36,7 @@ const typography = TYPOGRAPHY;
 
 export const LawAssistantScreen = ({ navigation, route }: any) => {
     const { user } = useAuth();
+    const { sessionId } = route.params || {};
     const [messages, setMessages] = useState<AIMessage[]>([]);
     const [inputText, setInputText] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -51,7 +52,7 @@ export const LawAssistantScreen = ({ navigation, route }: any) => {
 
         const loadHistory = async () => {
             try {
-                const history = await getAIChatHistory(user.uid, 'LAW_ASSISTANT');
+                const history = await getAIChatHistory(user.uid, 'LAW_ASSISTANT', 50, sessionId);
                 setMessages(history);
 
                 // If no history, send welcome message
@@ -82,7 +83,7 @@ export const LawAssistantScreen = ({ navigation, route }: any) => {
         // Subscribe to real-time updates
         const unsubscribe = subscribeToAIChat(user.uid, 'LAW_ASSISTANT', (updatedMessages) => {
             setMessages(updatedMessages);
-        });
+        }, sessionId);
 
         return () => unsubscribe();
     }, [user]);
@@ -134,7 +135,8 @@ export const LawAssistantScreen = ({ navigation, route }: any) => {
                 user.uid,
                 'LAW_ASSISTANT',
                 userMessage,
-                conversationHistory
+                conversationHistory,
+                sessionId
             );
 
             // AI response will be added via real-time subscription

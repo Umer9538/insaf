@@ -16,9 +16,10 @@ import { Card } from '../../components/common/Card';
 import { getUserChatSessions, createChatSession, AIChatSession } from '../../services/ai.service';
 import { formatDistanceToNow } from 'date-fns';
 
-export const AIChatListScreen: React.FC = () => {
+export const AIChatListScreen: React.FC = ({ route }: any) => {
     const theme = useAppTheme();
     const navigation = useNavigation<any>();
+    const { chatType = 'LAW_COACH', targetScreen = 'LawCoach' } = route.params || {};
     const { user } = useAuth();
     const [sessions, setSessions] = useState<AIChatSession[]>([]);
     const [loading, setLoading] = useState(true);
@@ -27,7 +28,7 @@ export const AIChatListScreen: React.FC = () => {
     const loadSessions = useCallback(async () => {
         if (!user) return;
         try {
-            const userSessions = await getUserChatSessions(user.uid, 'LAW_COACH');
+            const userSessions = await getUserChatSessions(user.uid, chatType);
             setSessions(userSessions);
         } catch (error) {
             console.error('Error loading chat sessions:', error);
@@ -52,8 +53,9 @@ export const AIChatListScreen: React.FC = () => {
         if (!user) return;
         try {
             setLoading(true);
-            const sessionId = await createChatSession(user.uid, 'LAW_COACH', 'New Consultation');
-            navigation.navigate('LawCoach', { sessionId });
+            const title = chatType === 'LAW_COACH' ? 'New Consultation' : 'New Case Analysis';
+            const sessionId = await createChatSession(user.uid, chatType, title);
+            navigation.navigate(targetScreen, { sessionId });
         } catch (error) {
             console.error('Error creating chat session:', error);
             setLoading(false);
@@ -61,7 +63,7 @@ export const AIChatListScreen: React.FC = () => {
     };
 
     const handleSessionPress = (sessionId: string) => {
-        navigation.navigate('LawCoach', { sessionId });
+        navigation.navigate(targetScreen, { sessionId });
     };
 
     const renderItem = ({ item }: { item: AIChatSession }) => (
@@ -94,7 +96,9 @@ export const AIChatListScreen: React.FC = () => {
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                     <Ionicons name="arrow-back" size={24} color={theme.colors.text.primary} />
                 </TouchableOpacity>
-                <Text variant="h3">AI Law Coach</Text>
+                <Text variant="h3">
+                    {chatType === 'LAW_COACH' ? 'AI Law Coach' : 'AI Law Assistant'}
+                </Text>
                 <View style={{ width: 24 }} />
             </View>
 

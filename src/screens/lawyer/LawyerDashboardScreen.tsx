@@ -265,17 +265,28 @@ export const LawyerDashboardScreen: React.FC = () => {
                 {specialization || 'Legal Services'}
               </Text>
             </View>
-            <TouchableOpacity
-              style={styles.notificationButton}
-              onPress={() => navigation.navigate('Notifications')}
-            >
-              <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
-              <View style={styles.notificationBadge}>
-                <Text variant="caption" style={styles.badgeText}>
-                  {stats?.upcomingConsultations || 0}
-                </Text>
-              </View>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <TouchableOpacity
+                style={styles.notificationButton}
+                onPress={() => navigation.navigate('AIChatList', {
+                  chatType: 'LAW_ASSISTANT',
+                  targetScreen: 'LawAssistant'
+                })}
+              >
+                <Ionicons name="chatbubbles-outline" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.notificationButton}
+                onPress={() => navigation.navigate('Notifications')}
+              >
+                <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
+                <View style={styles.notificationBadge}>
+                  <Text variant="caption" style={styles.badgeText}>
+                    {stats?.upcomingConsultations || 0}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
           </View>
         </Animated.View>
 

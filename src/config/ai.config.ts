@@ -28,10 +28,10 @@ export const AI_CONFIG: AIConfig = {
 
     // API Key - IMPORTANT: Move this to environment variables in production
     // For now, you can add it here temporarily for testing
-    apiKey: process.env.EXPO_PUBLIC_AI_API_KEY || 'AIzaSyDm5bDmRhZayBCGa9pPflor5xXuJHpSeMc',
+    apiKey: process.env.EXPO_PUBLIC_AI_API_KEY || '',
 
     // Model selection based on provider
-    model: 'gemini-pro', // Google Gemini Pro model
+    model: 'gemini-flash-latest', // Google Gemini Flash Latest model
 
     // Response creativity (0.0 - 1.0)
     temperature: 0.7,
@@ -112,7 +112,7 @@ Always maintain lawyer-client privilege and confidentiality.`,
 // API Endpoints based on provider
 export const AI_ENDPOINTS = {
     openai: 'https://api.openai.com/v1/chat/completions',
-    gemini: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent',
+    gemini: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
     claude: 'https://api.anthropic.com/v1/messages',
 };
 
@@ -124,8 +124,8 @@ export const AI_MODELS = {
         'gpt-4-turbo': 'GPT-4 Turbo (Fast + Capable)',
     },
     gemini: {
-        'gemini-pro': 'Gemini Pro',
-        'gemini-pro-vision': 'Gemini Pro Vision',
+        'gemini-1.5-flash': 'Gemini 1.5 Flash (Fast & Efficient)',
+        'gemini-1.5-pro': 'Gemini 1.5 Pro (Most Capable)',
     },
     claude: {
         'claude-3-opus': 'Claude 3 Opus (Most Capable)',
