@@ -1,6 +1,6 @@
 /**
  * INSAF - Lawyers Screen
- *
+ * 
  * Browse and search for verified lawyers
  */
 
@@ -13,6 +13,8 @@ import {
   TextInput,
   Dimensions,
   Animated,
+  ActivityIndicator,
+  Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,280 +22,227 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../context/ThemeContext';
 import { Text } from '../../components/common/Text';
+import { getVerifiedLawyers, LawyerProfile, searchLawyersBySpecialization } from '../../services/lawyer.service';
 
 const { width } = Dimensions.get('window');
 
 // Lawyer Categories
 const CATEGORIES = [
-  { id: 'all', name: 'All', icon: 'grid' },
-  { id: 'criminal', name: 'Criminal', icon: 'shield' },
-  { id: 'family', name: 'Family', icon: 'people' },
-  { id: 'corporate', name: 'Corporate', icon: 'business' },
-  { id: 'property', name: 'Property', icon: 'home' },
-  { id: 'civil', name: 'Civil', icon: 'document-text' },
-];
-
-// Sample Lawyers Data
-const LAWYERS = [
-  {
-    id: '1',
-    name: 'Adv. Ahmad Khan',
-    specialty: 'Criminal Law',
-    experience: '15 years',
-    rating: 4.9,
-    reviews: 128,
-    location: 'Lahore',
-    verified: true,
-    hourlyRate: 5000,
-    image: null,
-  },
-  {
-    id: '2',
-    name: 'Adv. Sara Ali',
-    specialty: 'Family Law',
-    experience: '12 years',
-    rating: 4.8,
-    reviews: 95,
-    location: 'Karachi',
-    verified: true,
-    hourlyRate: 4500,
-    image: null,
-  },
-  {
-    id: '3',
-    name: 'Adv. Imran Shah',
-    specialty: 'Corporate Law',
-    experience: '20 years',
-    rating: 4.7,
-    reviews: 156,
-    location: 'Islamabad',
-    verified: true,
-    hourlyRate: 8000,
-    image: null,
-  },
-  {
-    id: '4',
-    name: 'Adv. Fatima Zahra',
-    specialty: 'Property Law',
-    experience: '10 years',
-    rating: 4.6,
-    reviews: 72,
-    location: 'Lahore',
-    verified: true,
-    hourlyRate: 4000,
-    image: null,
-  },
-  {
-    id: '5',
-    name: 'Adv. Bilal Ahmed',
-    specialty: 'Civil Law',
-    experience: '8 years',
-    rating: 4.5,
-    reviews: 48,
-    location: 'Peshawar',
-    verified: true,
-    hourlyRate: 3500,
-    image: null,
-  },
+  { id: 'all', name: 'All', icon: 'grid-outline' },
+  { id: 'CRIMINAL', name: 'Criminal', icon: 'shield-checkmark-outline' },
+  { id: 'FAMILY_LAW', name: 'Family', icon: 'people-outline' },
+  { id: 'CORPORATE', name: 'Corporate', icon: 'business-outline' },
+  { id: 'REAL_ESTATE', name: 'Property', icon: 'home-outline' },
+  { id: 'CIVIL_LITIGATION', name: 'Civil', icon: 'document-text-outline' },
 ];
 
 export const LawyersScreen: React.FC = () => {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
 
-  // Animated values
-  const headerAnim = useRef(new Animated.Value(0)).current;
-  const searchAnim = useRef(new Animated.Value(0)).current;
-  const categoriesAnim = useRef(new Animated.Value(0)).current;
+  const [activeCategory, setActiveCategory] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [lawyers, setLawyers] = useState<LawyerProfile[]>([]);
+  const [filteredLawyers, setFilteredLawyers] = useState<LawyerProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.stagger(100, [
-      Animated.timing(headerAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-      Animated.timing(searchAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-      Animated.timing(categoriesAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
+    fetchLawyers();
+  }, [activeCategory]);
 
-  const filteredLawyers = LAWYERS.filter((lawyer) => {
-    const matchesSearch = lawyer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lawyer.specialty.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' ||
-      lawyer.specialty.toLowerCase().includes(selectedCategory);
-    return matchesSearch && matchesCategory;
-  });
+  const fetchLawyers = async () => {
+    setLoading(true);
+    try {
+      console.log('Fetching lawyers for category:', activeCategory);
+      let data: LawyerProfile[] = [];
+      if (activeCategory === 'all') {
+        data = await getVerifiedLawyers();
+      } else {
+        data = await searchLawyersBySpecialization(activeCategory as any);
+      }
+      console.log('Fetched lawyers count:', data.length);
+      console.log('Sample lawyer data:', data[0]); // Log first item to check fields
+      setLawyers(data);
+      setFilteredLawyers(data);
+    } catch (error) {
+      console.error('Error fetching lawyers:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const renderLawyerCard = ({ item, index }: { item: typeof LAWYERS[0]; index: number }) => (
-    <View>
-      <TouchableOpacity
-        style={[styles.lawyerCard, { backgroundColor: theme.colors.surface.primary }]}
-        onPress={() => navigation.navigate('LawyerDetail', { lawyerId: item.id })}
-        activeOpacity={0.7}
-      >
-        {/* Lawyer Image */}
-        <LinearGradient
-          colors={['#1a365d', '#2d4a7c']}
-          style={styles.lawyerImage}
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setFilteredLawyers(lawyers);
+    } else {
+      const filtered = lawyers.filter(lawyer =>
+        lawyer.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        lawyer.email.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      setFilteredLawyers(filtered);
+    }
+  }, [searchQuery, lawyers]);
+
+  const renderLawyerCard = ({ item, index }: { item: LawyerProfile; index: number }) => {
+    const inputRange = [
+      -1,
+      0,
+      (120 + 16) * index,
+      (120 + 16) * (index + 2),
+    ];
+
+    const opacity = scrollY.interpolate({
+      inputRange,
+      outputRange: [1, 1, 1, 0],
+    });
+
+    const scale = scrollY.interpolate({
+      inputRange,
+      outputRange: [1, 1, 1, 0.9],
+    });
+
+    return (
+      <Animated.View style={{ opacity, transform: [{ scale }] }}>
+        <TouchableOpacity
+          style={[styles.card, { backgroundColor: theme.colors.surface.primary }]}
+          onPress={() => navigation.navigate('LawyerDetail', { lawyerId: item.userId })}
+          activeOpacity={0.9}
         >
-          <Ionicons name="person" size={32} color="#d4af37" />
-        </LinearGradient>
-
-        {/* Lawyer Info */}
-        <View style={styles.lawyerInfo}>
-          <View style={styles.nameRow}>
-            <Text variant="h4" color="primary" numberOfLines={1}>
-              {item.name}
-            </Text>
-            {item.verified && (
-              <View style={styles.verifiedBadge}>
-                <Ionicons name="checkmark-circle" size={16} color="#4CAF50" />
-              </View>
-            )}
-          </View>
-
-          <Text variant="bodySmall" color="secondary" style={styles.specialty}>
-            {item.specialty} • {item.experience}
-          </Text>
-
-          <View style={styles.locationRow}>
-            <Ionicons name="location" size={14} color={theme.colors.text.tertiary} />
-            <Text variant="caption" color="tertiary"> {item.location}</Text>
-          </View>
-
-          <View style={styles.statsRow}>
-            <View style={styles.ratingBadge}>
-              <Ionicons name="star" size={12} color="#d4af37" />
-              <Text variant="labelSmall" color="primary"> {item.rating}</Text>
-              <Text variant="caption" color="tertiary"> ({item.reviews})</Text>
+          <View style={styles.cardContent}>
+            {/* Image */}
+            <View style={styles.imageContainer}>
+              {item.profileImage ? (
+                <Image source={{ uri: item.profileImage }} style={styles.image} />
+              ) : (
+                <View style={[styles.placeholderImage, { backgroundColor: theme.colors.surface.secondary }]}>
+                  <Ionicons name="person" size={24} color={theme.colors.text.secondary} />
+                </View>
+              )}
+              {item.verificationStatus === 'VERIFIED' && (
+                <View style={styles.verifiedBadge}>
+                  <Ionicons name="checkmark" size={12} color="#FFFFFF" />
+                </View>
+              )}
             </View>
-            <Text variant="labelMedium" color="brand">
-              Rs. {item.hourlyRate.toLocaleString()}/hr
-            </Text>
-          </View>
-        </View>
 
-        {/* Arrow */}
-        <View style={styles.arrowContainer}>
-          <Ionicons name="chevron-forward" size={20} color={theme.colors.text.tertiary} />
-        </View>
-      </TouchableOpacity>
-    </View>
-  );
+            {/* Info */}
+            <View style={styles.infoContainer}>
+              <View style={styles.headerRow}>
+                <Text variant="h4" color="primary" numberOfLines={1} style={styles.name}>
+                  {item.fullName}
+                </Text>
+                <View style={styles.ratingContainer}>
+                  <Ionicons name="star" size={14} color="#F4B400" />
+                  <Text variant="labelMedium" color="primary" style={styles.ratingText}>
+                    {item.ratingAverage?.toFixed(1) || 'N/A'}
+                  </Text>
+                  <Text variant="caption" color="secondary" style={styles.reviewsText}>
+                    ({item.totalReviews})
+                  </Text>
+                </View>
+              </View>
+
+              <Text variant="bodySmall" color="brand" style={styles.specialty}>
+                {typeof item.specializations?.[0] === 'string'
+                  ? item.specializations[0].replace(/_/g, ' ')
+                  : 'General Practice'}
+              </Text>
+
+              <View style={styles.detailsRow}>
+                <View style={styles.detailItem}>
+                  <Ionicons name="briefcase-outline" size={14} color={theme.colors.text.secondary} />
+                  <Text variant="caption" color="secondary" style={styles.detailText}>
+                    {item.experienceYears}+ Years
+                  </Text>
+                </View>
+                <View style={styles.dotSeparator} />
+                <View style={styles.detailItem}>
+                  <Ionicons name="people-outline" size={14} color={theme.colors.text.secondary} />
+                  <Text variant="caption" color="secondary" style={styles.detailText}>
+                    {item.followerCount || 0} Followers
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.locationRow}>
+                <Ionicons name="location-outline" size={14} color={theme.colors.text.tertiary} />
+                <Text variant="caption" color="tertiary" numberOfLines={1} style={styles.locationText}>
+                  {item.serviceAreas?.[0] || 'Pakistan'}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
-      {/* Header */}
       <LinearGradient
-        colors={theme.colors.gradient.primary as [string, string]}
-        style={[styles.header, { paddingTop: insets.top + 16 }]}
-      >
-        <Animated.View
-          style={{
-            opacity: headerAnim,
-            transform: [{
-              translateY: headerAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [20, 0],
-              }),
-            }],
-          }}
-        >
-          <Text variant="h2" style={styles.headerTitle}>Find Lawyers</Text>
-          <Text variant="bodySmall" style={styles.headerSubtitle}>
-            Connect with verified legal professionals
-          </Text>
-        </Animated.View>
+        colors={[theme.colors.background.primary, theme.colors.surface.secondary]}
+        style={StyleSheet.absoluteFillObject}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 0.3 }}
+      />
+
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top }]}>
+        <View style={styles.headerTop}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={theme.colors.text.primary} />
+          </TouchableOpacity>
+          <Text variant="h3" color="primary">Find Lawyers</Text>
+          <View style={{ width: 40 }} />
+        </View>
 
         {/* Search Bar */}
-        <Animated.View
-          style={[
-            styles.searchContainer,
-            {
-              opacity: searchAnim,
-              transform: [{
-                translateY: searchAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [20, 0],
-                }),
-              }],
-            }
-          ]}
-        >
-          <View style={[styles.searchBar, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
-            <Ionicons name="search" size={20} color="rgba(255,255,255,0.7)" />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search by name or specialty..."
-              placeholderTextColor="rgba(255,255,255,0.5)"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Ionicons name="close-circle" size={20} color="rgba(255,255,255,0.7)" />
-              </TouchableOpacity>
-            )}
-          </View>
-          <TouchableOpacity style={styles.filterButton}>
-            <Ionicons name="options" size={20} color="#FFFFFF" />
-          </TouchableOpacity>
-        </Animated.View>
-      </LinearGradient>
+        <View style={[styles.searchContainer, { backgroundColor: theme.colors.surface.primary }]}>
+          <Ionicons name="search" size={20} color={theme.colors.text.tertiary} />
+          <TextInput
+            style={[styles.searchInput, { color: theme.colors.text.primary }]}
+            placeholder="Search by name, specialty, or email..."
+            placeholderTextColor={theme.colors.text.tertiary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
 
-      {/* Categories */}
-      <Animated.View
-        style={{
-          opacity: categoriesAnim,
-          transform: [{
-            translateY: categoriesAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [20, 0],
-            }),
-          }],
-        }}
-      >
+        {/* Categories */}
         <FlatList
-          horizontal
           data={CATEGORIES}
-          keyExtractor={(item) => item.id}
+          horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.categoriesContainer}
+          keyExtractor={item => item.id}
           renderItem={({ item }) => (
             <TouchableOpacity
               style={[
-                styles.categoryChip,
+                styles.categoryItem,
                 {
-                  backgroundColor: selectedCategory === item.id
+                  backgroundColor: activeCategory === item.id
                     ? theme.colors.brand.primary
-                    : theme.colors.surface.secondary,
-                },
+                    : theme.colors.surface.primary,
+                  borderColor: activeCategory === item.id
+                    ? theme.colors.brand.primary
+                    : theme.colors.border.light
+                }
               ]}
-              onPress={() => setSelectedCategory(item.id)}
+              onPress={() => setActiveCategory(item.id)}
             >
               <Ionicons
                 name={item.icon as any}
-                size={16}
-                color={selectedCategory === item.id ? '#FFFFFF' : theme.colors.text.secondary}
+                size={20}
+                color={activeCategory === item.id ? '#FFFFFF' : theme.colors.text.secondary}
               />
               <Text
-                variant="labelSmall"
+                variant="labelMedium"
                 style={{
-                  color: selectedCategory === item.id ? '#FFFFFF' : theme.colors.text.secondary,
-                  marginLeft: 6,
+                  color: activeCategory === item.id ? '#FFFFFF' : theme.colors.text.secondary,
+                  marginLeft: 8
                 }}
               >
                 {item.name}
@@ -301,24 +250,34 @@ export const LawyersScreen: React.FC = () => {
             </TouchableOpacity>
           )}
         />
-      </Animated.View>
+      </View>
 
-      {/* Lawyers List */}
-      <FlatList
-        data={filteredLawyers}
-        keyExtractor={(item) => item.id}
-        renderItem={renderLawyerCard}
-        contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="search" size={48} color={theme.colors.text.tertiary} />
-            <Text variant="bodyMedium" color="secondary" style={styles.emptyText}>
-              No lawyers found matching your search
-            </Text>
-          </View>
-        }
-      />
+      {/* List */}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.brand.primary} />
+        </View>
+      ) : (
+        <Animated.FlatList
+          data={filteredLawyers}
+          keyExtractor={item => item.userId}
+          renderItem={renderLawyerCard}
+          contentContainerStyle={styles.listContent}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+            { useNativeDriver: true }
+          )}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Ionicons name="search-outline" size={64} color={theme.colors.text.tertiary} />
+              <Text variant="h4" color="secondary" style={{ marginTop: 16 }}>No Lawyers Found</Text>
+              <Text variant="bodyMedium" color="tertiary" style={{ textAlign: 'center', marginTop: 8 }}>
+                Try adjusting your filters or search query
+              </Text>
+            </View>
+          }
+        />
+      )}
     </View>
   );
 };
@@ -328,119 +287,165 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 16,
+    zIndex: 10,
   },
-  headerTitle: {
-    color: '#FFFFFF',
-    marginBottom: 4,
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    marginBottom: 16,
   },
-  headerSubtitle: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    marginBottom: 20,
+  backButton: {
+    padding: 8,
+    marginLeft: -8,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  searchBar: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    marginHorizontal: 16,
     paddingHorizontal: 16,
     height: 48,
     borderRadius: 12,
-    marginRight: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    marginBottom: 16,
   },
   searchInput: {
     flex: 1,
     marginLeft: 12,
     fontSize: 16,
-    color: '#FFFFFF',
-  },
-  filterButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   categoriesContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
   },
-  categoryChip: {
+  categoryItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderRadius: 20,
     marginRight: 10,
+    borderWidth: 1,
   },
-  listContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 100,
-  },
-  lawyerCard: {
-    flexDirection: 'row',
+  listContent: {
     padding: 16,
+    paddingTop: 8,
+  },
+  card: {
     borderRadius: 16,
-    marginBottom: 12,
+    marginBottom: 16,
+    padding: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
     elevation: 3,
   },
-  lawyerImage: {
-    width: 70,
-    height: 70,
-    borderRadius: 16,
+  cardContent: {
+    flexDirection: 'row',
+  },
+  imageContainer: {
+    position: 'relative',
+    marginRight: 12,
+  },
+  image: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+  },
+  placeholderImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  lawyerInfo: {
+  verifiedBadge: {
+    position: 'absolute',
+    bottom: -6,
+    right: -6,
+    backgroundColor: '#4CAF50',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  infoContainer: {
     flex: 1,
-    marginLeft: 14,
     justifyContent: 'center',
   },
-  nameRow: {
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 4,
+  },
+  name: {
+    flex: 1,
+    marginRight: 8,
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(244, 180, 0, 0.1)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  ratingText: {
+    marginLeft: 4,
+    fontWeight: '600',
+  },
+  reviewsText: {
+    marginLeft: 2,
+    fontSize: 10,
+  },
+  specialty: {
+    marginBottom: 8,
+    fontWeight: '500',
+  },
+  detailsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  detailItem: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  verifiedBadge: {
-    marginLeft: 6,
+  detailText: {
+    marginLeft: 4,
   },
-  specialty: {
-    marginTop: 4,
+  dotSeparator: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: '#CCC',
+    marginHorizontal: 8,
   },
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
   },
-  statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 8,
+  locationText: {
+    marginLeft: 4,
   },
-  ratingBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  arrowContainer: {
+  loadingContainer: {
+    flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   emptyContainer: {
     alignItems: 'center',
+    justifyContent: 'center',
     paddingTop: 60,
   },
-  emptyText: {
-    marginTop: 16,
-    textAlign: 'center',
-  },
 });
-
-export default LawyersScreen;

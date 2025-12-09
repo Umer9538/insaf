@@ -17,6 +17,7 @@ import {
   onSnapshot,
   Unsubscribe,
   addDoc,
+  getCountFromServer as getCountFromFirestore,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -32,6 +33,7 @@ export const COLLECTIONS = {
   ESCROWS: 'escrows',
   PAYMENTS: 'payments',
   MESSAGES: 'messages',
+  FOLLOWS: 'follows',
   CONSULTATIONS: 'consultations',
   REVIEWS: 'reviews',
   NOTIFICATIONS: 'notifications',
@@ -132,6 +134,20 @@ export const deleteDocument = async (
 ): Promise<void> => {
   try {
     await deleteDoc(doc(db, collectionName, docId));
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Get count of documents matching query
+export const getCount = async (
+  collectionName: string,
+  constraints: QueryConstraint[] = []
+): Promise<number> => {
+  try {
+    const q = query(collection(db, collectionName), ...constraints);
+    const snapshot = await getCountFromFirestore(q);
+    return snapshot.data().count;
   } catch (error) {
     throw error;
   }

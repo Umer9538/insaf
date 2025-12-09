@@ -66,19 +66,27 @@ export const getBidById = async (bidId: string): Promise<Bid | null> => {
 
 // Get all bids for a case
 export const getBidsForCase = async (caseId: string): Promise<Bid[]> => {
-  return getDocuments<Bid>(COLLECTIONS.BIDS, [
+  const bids = await getDocuments<Bid>(COLLECTIONS.BIDS, [
     where('caseId', '==', caseId),
     where('status', '==', 'PENDING'),
-    orderBy('createdAt', 'desc'),
   ]);
+  return bids.sort((a, b) => {
+    const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
+    const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+    return dateB.getTime() - dateA.getTime();
+  });
 };
 
 // Get all bids by a lawyer
 export const getBidsByLawyer = async (lawyerId: string): Promise<Bid[]> => {
-  return getDocuments<Bid>(COLLECTIONS.BIDS, [
+  const bids = await getDocuments<Bid>(COLLECTIONS.BIDS, [
     where('lawyerId', '==', lawyerId),
-    orderBy('createdAt', 'desc'),
   ]);
+  return bids.sort((a, b) => {
+    const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
+    const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+    return dateB.getTime() - dateA.getTime();
+  });
 };
 
 // Update bid

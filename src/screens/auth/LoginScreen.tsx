@@ -26,6 +26,7 @@ import { Button, IconButton } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { AuthStackParamList } from '../../navigation/types';
 import { loginUser } from '../../services/auth.service';
+import { validateEmail } from '../../utils/validations';
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
@@ -215,10 +216,10 @@ export const LoginScreen: React.FC = () => {
   const validateForm = (): boolean => {
     const newErrors: { email?: string; password?: string } = {};
 
-    if (!email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
-      newErrors.email = 'Please enter a valid email';
+    // Strict email validation
+    const emailError = validateEmail(email.trim());
+    if (emailError) {
+      newErrors.email = emailError;
     }
 
     if (!password) {

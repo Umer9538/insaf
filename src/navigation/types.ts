@@ -66,6 +66,7 @@ export type LawyerStackParamList = {
   ChatDetail: { conversationId: string };
   LawyerEarnings: undefined;
   LawyerProfileEdit: undefined;
+  LawyerVerification: undefined;
   Notifications: undefined;
   AIChatList: { chatType?: 'LAW_COACH' | 'LAW_ASSISTANT'; targetScreen?: string } | undefined;
   LawAssistant: { sessionId?: string } | undefined;

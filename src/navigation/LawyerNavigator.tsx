@@ -23,16 +23,20 @@ import { ChatScreen } from '../screens/main/ChatScreen';
 import { ProfileScreen } from '../screens/main/ProfileScreen';
 import { AIChatListScreen } from '../screens/main/AIChatListScreen';
 import { LawAssistantScreen } from '../screens/lawyer/LawAssistantScreen';
+import { LawyersScreen } from '../screens/main/LawyersScreen';
+import { FollowListScreen } from '../screens/main/FollowListScreen';
 
 // Detail Screens
 import { CaseDetailScreen } from '../screens/detail/CaseDetailScreen';
 import { ChatDetailScreen } from '../screens/detail/ChatDetailScreen';
 import { NotificationsScreen } from '../screens/detail/NotificationsScreen';
+import { LawyerDetailScreen } from '../screens/detail/LawyerDetailScreen';
 
 // Lawyer-specific Detail Screens
 import { SubmitBidScreen } from '../screens/lawyer/SubmitBidScreen';
 import { LawyerEarningsScreen } from '../screens/lawyer/LawyerEarningsScreen';
 import { LawyerProfileEditScreen } from '../screens/lawyer/LawyerProfileEditScreen';
+import { LawyerVerificationScreen } from '../screens/lawyer/LawyerVerificationScreen';
 
 // Settings Screens
 import {
@@ -209,6 +213,27 @@ export const LawyerNavigator: React.FC = () => {
         name="LawAssistant"
         component={LawAssistantScreen}
         options={{ animation: 'slide_from_bottom' }}
+      />
+      <Stack.Screen
+        name="Lawyers"
+        component={LawyersScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="LawyerDetail"
+        component={LawyerDetailScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="FollowList"
+        component={FollowListScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+
+      <Stack.Screen
+        name="LawyerVerification"
+        component={LawyerVerificationScreen}
+        options={{ animation: 'slide_from_right' }}
       />
 
       {/* Settings Screens */}

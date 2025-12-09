@@ -27,6 +27,7 @@ import { Input } from '../../components/common/Input';
 import { Card } from '../../components/common/Card';
 import { AuthStackParamList } from '../../navigation/types';
 import { registerUser, UserRole } from '../../services/auth.service';
+import { validateEmail } from '../../utils/validations';
 
 type RegisterScreenNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Register'>;
 
@@ -280,10 +281,10 @@ export const RegisterScreen: React.FC = () => {
       newErrors.fullName = 'Name must be at least 3 characters';
     }
 
-    if (!email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
-      newErrors.email = 'Please enter a valid email';
+    // Strict email validation
+    const emailError = validateEmail(email.trim());
+    if (emailError) {
+      newErrors.email = emailError;
     }
 
     if (!password) {

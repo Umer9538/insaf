@@ -29,13 +29,23 @@ import { Card } from '../../components/common/Card';
 import {
   getLawyerDashboardStats,
   getActivityFeed,
-  LawyerDashboardStats,
 } from '../../services/analytics.service';
 import {
   getLawyerProfile,
   updateAvailability,
   AvailabilityStatus,
 } from '../../services/lawyer.service';
+
+// Analytics interface with verification status
+export interface LawyerDashboardStats {
+  activeCases: number;
+  pendingBids: number;
+  totalEarnings: number;
+  averageRating: number;
+  totalReviews: number;
+  upcomingConsultations: number;
+  verificationStatus?: 'VERIFIED' | 'PENDING' | 'UNVERIFIED';
+}
 
 const { width } = Dimensions.get('window');
 
@@ -60,7 +70,7 @@ interface QuickAction {
 const QUICK_ACTIONS: QuickAction[] = [
   { id: '1', icon: 'briefcase-outline', title: 'Available Cases', color: '#4CAF50', route: 'CasesTab' },
   { id: '2', icon: 'hand-left-outline', title: 'My Bids', color: '#2196F3', route: 'BidsTab' },
-  { id: '3', icon: 'chatbubbles-outline', title: 'Messages', color: '#9C27B0', route: 'ChatTab' },
+  { id: '3', icon: 'people-outline', title: 'Find Lawyers', color: '#9C27B0', route: 'Lawyers' },
   { id: '4', icon: 'wallet-outline', title: 'Earnings', color: '#FF9800', route: 'LawyerEarnings' },
 ];
 
@@ -257,13 +267,30 @@ export const LawyerDashboardScreen: React.FC = () => {
                 <Text variant="h2" style={styles.userName}>
                   {user?.displayName || 'Lawyer'}
                 </Text>
-                <View style={styles.verifiedBadge}>
-                  <Ionicons name="checkmark-circle" size={20} color="#d4af37" />
-                </View>
+                {/* Real Verified Badge */}
+                {stats?.verificationStatus === 'VERIFIED' && (
+                  <View style={styles.verifiedBadge}>
+                    <Ionicons name="checkmark-circle" size={20} color="#d4af37" />
+                  </View>
+                )}
               </View>
               <Text variant="caption" style={styles.specialization}>
                 {specialization || 'Legal Services'}
               </Text>
+
+              {/* Not Verified Warning */}
+              {stats?.verificationStatus !== 'VERIFIED' && (
+                <TouchableOpacity
+                  style={styles.notVerifiedContainer}
+                  onPress={() => navigation.navigate('LawyerVerification')}
+                >
+                  <Ionicons name="alert-circle-outline" size={14} color="#EF4444" />
+                  <Text variant="caption" style={{ color: '#EF4444', marginLeft: 4, fontWeight: 'bold' }}>
+                    Get Verified
+                  </Text>
+                  <Ionicons name="chevron-forward" size={12} color="#EF4444" />
+                </TouchableOpacity>
+              )}
             </View>
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <TouchableOpacity
@@ -782,6 +809,16 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: -10,
     bottom: -10,
+  },
+  notVerifiedContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginTop: 8,
   },
 });
 

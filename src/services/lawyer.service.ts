@@ -8,6 +8,8 @@ import {
   orderBy,
   limit,
 } from './firestore.service';
+import { verifyLicense, BarCouncilRecord } from './barCouncil.data';
+import { serverTimestamp } from 'firebase/firestore';
 import { AreaOfLaw } from './case.service';
 
 // Verification status from PRD
@@ -17,6 +19,7 @@ export type AvailabilityStatus = 'AVAILABLE' | 'BUSY' | 'UNAVAILABLE';
 export interface LawyerProfile {
   id?: string;
   userId: string;
+  email: string;
   fullName: string;
   cnic?: string; // Encrypted
   barId: string;
@@ -41,6 +44,8 @@ export interface LawyerProfile {
   ratingAverage: number;
   totalReviews: number;
   totalCasesCompleted: number;
+  followerCount: number;
+  followingCount: number;
   documents: {
     barIdFront?: string;
     barIdBack?: string;
@@ -56,21 +61,27 @@ export interface LawyerProfile {
 // Create lawyer profile
 export const createLawyerProfile = async (
   userId: string,
-  profileData: Omit<LawyerProfile, 'id' | 'userId' | 'verificationStatus' | 'ratingAverage' | 'totalReviews' | 'totalCasesCompleted' | 'createdAt' | 'updatedAt'>
+  email: string,
+  profileData: Omit<LawyerProfile, 'id' | 'userId' | 'email' | 'verificationStatus' | 'ratingAverage' | 'totalReviews' | 'totalCasesCompleted' | 'followerCount' | 'followingCount' | 'createdAt' | 'updatedAt'>
 ): Promise<void> => {
   const profile: Omit<LawyerProfile, 'id'> = {
     ...profileData,
     userId,
+    email,
     verificationStatus: 'PENDING',
     ratingAverage: 0,
     totalReviews: 0,
     totalCasesCompleted: 0,
+    followerCount: 0,
+    followingCount: 0,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
 
   return createDocumentWithId(COLLECTIONS.LAWYER_PROFILES, userId, profile);
 };
+
+
 
 // Get lawyer profile
 export const getLawyerProfile = async (userId: string): Promise<LawyerProfile | null> => {
@@ -96,41 +107,111 @@ export const submitForVerification = async (
   });
 };
 
+// Verify lawyer credentials against mock DB
+export const verifyLawyerCredentials = async (
+  userId: string,
+  licenseNumber: string,
+  cnic: string,
+  fullName: string
+): Promise<{ success: boolean; message: string; record?: BarCouncilRecord }> => {
+  // Simulate API delay
+  await new Promise(resolve => setTimeout(resolve, 1500));
+
+  // Pass CNIC and Name for strict verification
+  const record = verifyLicense(licenseNumber, cnic, fullName);
+
+  if (!record) {
+    return {
+      success: false,
+      message: 'Verification failed. License No, CNIC, and Name must match Bar Council records.'
+    };
+  }
+
+  try {
+    // Check if profile exists first
+    const existingProfile = await getDocument(COLLECTIONS.LAWYER_PROFILES, userId);
+
+    if (existingProfile) {
+      // Update existing profile
+      await updateDocument(COLLECTIONS.LAWYER_PROFILES, userId, {
+        verificationStatus: 'VERIFIED',
+        licenseNumber: record.licenseNumber,
+        barId: record.barId,
+        isVerified: true
+      });
+    } else {
+      // Create new profile if it doesn't exist
+      await createDocumentWithId(COLLECTIONS.LAWYER_PROFILES, userId, {
+        userId,
+        email: '', // Needed in profile but might be empty here; user can update later
+        fullName: record.fullName, // Use name from Bar Council
+        verificationStatus: 'VERIFIED',
+        licenseNumber: record.licenseNumber,
+        barId: record.barId,
+        isVerified: true,
+        specializations: [],
+        ratingAverage: 0,
+        totalReviews: 0,
+        totalCasesCompleted: 0,
+        followerCount: 0,
+        followingCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    }
+
+    return {
+      success: true,
+      message: 'Verification successful! Your profile is now verified.',
+      record
+    };
+  } catch (error: any) {
+    console.error('Verification error:', error);
+    return {
+      success: false,
+      message: 'Verification failed: ' + (error.message || 'Unknown error')
+    };
+  }
+};
+
 // Get all verified lawyers
 export const getVerifiedLawyers = async (): Promise<LawyerProfile[]> => {
-  return getDocuments<LawyerProfile>(COLLECTIONS.LAWYER_PROFILES, [
+  console.log('getVerifiedLawyers: Querying Firestore...');
+  const lawyers = await getDocuments<LawyerProfile>(COLLECTIONS.LAWYER_PROFILES, [
     where('verificationStatus', '==', 'VERIFIED'),
-    orderBy('ratingAverage', 'desc'),
   ]);
+  console.log('getVerifiedLawyers: Found documents:', lawyers.length);
+  return lawyers.sort((a, b) => (b.ratingAverage || 0) - (a.ratingAverage || 0));
 };
 
 // Search lawyers by specialization
 export const searchLawyersBySpecialization = async (
   specialization: AreaOfLaw
 ): Promise<LawyerProfile[]> => {
-  return getDocuments<LawyerProfile>(COLLECTIONS.LAWYER_PROFILES, [
+  const lawyers = await getDocuments<LawyerProfile>(COLLECTIONS.LAWYER_PROFILES, [
     where('verificationStatus', '==', 'VERIFIED'),
     where('specializations', 'array-contains', specialization),
-    orderBy('ratingAverage', 'desc'),
   ]);
+  return lawyers.sort((a, b) => (b.ratingAverage || 0) - (a.ratingAverage || 0));
 };
 
 // Search lawyers by city
 export const searchLawyersByCity = async (city: string): Promise<LawyerProfile[]> => {
-  return getDocuments<LawyerProfile>(COLLECTIONS.LAWYER_PROFILES, [
+  const lawyers = await getDocuments<LawyerProfile>(COLLECTIONS.LAWYER_PROFILES, [
     where('verificationStatus', '==', 'VERIFIED'),
     where('serviceAreas', 'array-contains', city),
-    orderBy('ratingAverage', 'desc'),
   ]);
+  return lawyers.sort((a, b) => (b.ratingAverage || 0) - (a.ratingAverage || 0));
 };
 
 // Get top rated lawyers
 export const getTopRatedLawyers = async (count: number = 10): Promise<LawyerProfile[]> => {
-  return getDocuments<LawyerProfile>(COLLECTIONS.LAWYER_PROFILES, [
+  const lawyers = await getDocuments<LawyerProfile>(COLLECTIONS.LAWYER_PROFILES, [
     where('verificationStatus', '==', 'VERIFIED'),
-    orderBy('ratingAverage', 'desc'),
-    limit(count),
   ]);
+  return lawyers
+    .sort((a, b) => (b.ratingAverage || 0) - (a.ratingAverage || 0))
+    .slice(0, count);
 };
 
 // Update lawyer availability

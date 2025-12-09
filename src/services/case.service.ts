@@ -104,18 +104,26 @@ export const getCaseById = async (caseId: string): Promise<Case | null> => {
 
 // Get cases for client
 export const getClientCases = async (clientId: string): Promise<Case[]> => {
-  return getDocuments<Case>(COLLECTIONS.CASES, [
+  const cases = await getDocuments<Case>(COLLECTIONS.CASES, [
     where('clientId', '==', clientId),
-    orderBy('createdAt', 'desc'),
   ]);
+  return cases.sort((a, b) => {
+    const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
+    const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+    return dateB.getTime() - dateA.getTime();
+  });
 };
 
 // Get cases for lawyer
 export const getLawyerCases = async (lawyerId: string): Promise<Case[]> => {
-  return getDocuments<Case>(COLLECTIONS.CASES, [
+  const cases = await getDocuments<Case>(COLLECTIONS.CASES, [
     where('lawyerId', '==', lawyerId),
-    orderBy('createdAt', 'desc'),
   ]);
+  return cases.sort((a, b) => {
+    const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
+    const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+    return dateB.getTime() - dateA.getTime();
+  });
 };
 
 // Get available cases for bidding
@@ -124,14 +132,18 @@ export const getAvailableCases = async (
 ): Promise<Case[]> => {
   const constraints = [
     where('status', 'in', ['POSTED', 'BIDDING']),
-    orderBy('createdAt', 'desc'),
   ];
 
   if (areaOfLaw) {
     constraints.unshift(where('areaOfLaw', '==', areaOfLaw));
   }
 
-  return getDocuments<Case>(COLLECTIONS.CASES, constraints);
+  const cases = await getDocuments<Case>(COLLECTIONS.CASES, constraints);
+  return cases.sort((a, b) => {
+    const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
+    const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+    return dateB.getTime() - dateA.getTime();
+  });
 };
 
 // Update case status
