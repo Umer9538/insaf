@@ -20,6 +20,7 @@ import { useAuth } from '../context/AuthContext';
 // Screens
 import { SplashScreen } from '../screens/SplashScreen';
 import { OnboardingScreen } from '../screens/OnboardingScreen';
+import { BookConsultationScreen } from '../screens/detail/BookConsultationScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -118,6 +119,13 @@ export const RootNavigator: React.FC = () => {
         ) : (
           <Stack.Screen name="Main" component={MainNavigator} />
         )}
+
+        {/* Modals available globally */}
+        <Stack.Screen
+          name="BookConsultation"
+          component={BookConsultationScreen}
+          options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

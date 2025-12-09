@@ -18,7 +18,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
@@ -108,13 +108,19 @@ export const LawyerDashboardScreen: React.FC = () => {
         getLawyerProfile(user.uid),
       ]);
 
-      setStats(dashboardStats);
-      setRecentActivity(activities);
-
       if (lawyerProfile) {
+        // Merge verification status into stats
+        setStats({
+          ...dashboardStats,
+          verificationStatus: lawyerProfile.verificationStatus as 'VERIFIED' | 'PENDING' | 'UNVERIFIED',
+        });
         setIsAvailable(lawyerProfile.availabilityStatus === 'AVAILABLE');
         setSpecialization(lawyerProfile.specializations.join(' & ') || 'Legal Services');
+      } else {
+        setStats(dashboardStats);
       }
+
+      setRecentActivity(activities);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
@@ -122,9 +128,11 @@ export const LawyerDashboardScreen: React.FC = () => {
     }
   }, [user?.uid]);
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, [fetchDashboardData]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchDashboardData();
+    }, [fetchDashboardData])
+  );
 
   useEffect(() => {
     if (!loading) {
@@ -477,7 +485,7 @@ export const LawyerDashboardScreen: React.FC = () => {
                 variant="elevated"
                 style={[
                   styles.activityCard,
-                  index === recentActivity.length - 1 && styles.lastActivityCard
+                  index === recentActivity.length - 1 ? styles.lastActivityCard : {}
                 ]}
               >
                 <View style={styles.activityContent}>

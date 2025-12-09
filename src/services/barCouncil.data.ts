@@ -96,6 +96,14 @@ export const BAR_COUNCIL_DB: BarCouncilRecord[] = [
         barId: 'TEST-BAR-001',
         cnic: '11111-1111111-1',
         status: 'ACTIVE'
+    },
+    // New User Test Case
+    {
+        licenseNumber: 'ABD12345',
+        fullName: 'Adv. Abdullah Bin Aqeel',
+        barId: 'ICT-2024-001',
+        cnic: '35201-1122334-4',
+        status: 'ACTIVE'
     }
 ];
 
