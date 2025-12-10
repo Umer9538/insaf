@@ -75,7 +75,7 @@ export const SubmitBidScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const route = useRoute<SubmitBidScreenRouteProp>();
-  const { currentUser } = useAuth();
+  const { user: currentUser } = useAuth();
 
   const { caseId } = route.params;
 
@@ -259,7 +259,7 @@ export const SubmitBidScreen: React.FC = () => {
           {
             paddingTop: insets.top + 16,
             backgroundColor: theme.colors.surface.primary,
-            borderBottomColor: theme.colors.border.default,
+            borderBottomColor: theme.colors.border.light,
           },
         ]}
       >
@@ -362,7 +362,7 @@ export const SubmitBidScreen: React.FC = () => {
                       backgroundColor: theme.colors.input.background,
                       borderColor: errors.proposedFee
                         ? theme.colors.status.error
-                        : theme.colors.border.default,
+                        : theme.colors.border.light,
                     },
                   ]}
                 >
@@ -411,7 +411,7 @@ export const SubmitBidScreen: React.FC = () => {
                         borderColor:
                           feeType === 'FIXED'
                             ? theme.colors.brand.primary
-                            : theme.colors.border.default,
+                            : theme.colors.border.light,
                       },
                     ]}
                     onPress={() => setFeeType('FIXED')}
@@ -443,7 +443,7 @@ export const SubmitBidScreen: React.FC = () => {
                         borderColor:
                           feeType === 'HOURLY'
                             ? theme.colors.brand.primary
-                            : theme.colors.border.default,
+                            : theme.colors.border.light,
                       },
                     ]}
                     onPress={() => setFeeType('HOURLY')}
@@ -478,7 +478,7 @@ export const SubmitBidScreen: React.FC = () => {
                       backgroundColor: theme.colors.input.background,
                       borderColor: errors.estimatedTimeline
                         ? theme.colors.status.error
-                        : theme.colors.border.default,
+                        : theme.colors.border.light,
                     },
                   ]}
                   onPress={() => setShowTimelinePicker(!showTimelinePicker)}
@@ -512,7 +512,7 @@ export const SubmitBidScreen: React.FC = () => {
                       styles.timelinePicker,
                       {
                         backgroundColor: theme.colors.surface.primary,
-                        borderColor: theme.colors.border.default,
+                        borderColor: theme.colors.border.light,
                       },
                     ]}
                   >
@@ -582,7 +582,7 @@ export const SubmitBidScreen: React.FC = () => {
                       backgroundColor: theme.colors.input.background,
                       borderColor: errors.proposalText
                         ? theme.colors.status.error
-                        : theme.colors.border.default,
+                        : theme.colors.border.light,
                       color: theme.colors.text.primary,
                     },
                   ]}
@@ -620,7 +620,7 @@ export const SubmitBidScreen: React.FC = () => {
                         ? theme.colors.status.error
                         : termsAccepted
                         ? theme.colors.brand.primary
-                        : theme.colors.border.default,
+                        : theme.colors.border.light,
                     },
                   ]}
                 >

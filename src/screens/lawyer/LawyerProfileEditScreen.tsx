@@ -25,7 +25,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useAppTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { Text } from '../../components/common/Text';
-import { updateLawyerProfile } from '../../services/lawyer.service';
+import { updateLawyerProfile, getLawyerProfile } from '../../services/lawyer.service';
 import { AreaOfLaw } from '../../services/case.service';
 
 // TypeScript Interfaces
@@ -64,7 +64,7 @@ const CheckboxItem: React.FC<CheckboxItemProps> = ({ label, value, isSelected, o
             : theme.colors.surface.secondary,
           borderColor: isSelected
             ? theme.colors.brand.primary
-            : theme.colors.border.primary,
+            : theme.colors.border.light,
         },
       ]}
       onPress={onToggle}
@@ -79,7 +79,7 @@ const CheckboxItem: React.FC<CheckboxItemProps> = ({ label, value, isSelected, o
               : 'transparent',
             borderColor: isSelected
               ? theme.colors.brand.primary
-              : theme.colors.border.primary,
+              : theme.colors.border.light,
           },
         ]}
       >
@@ -96,16 +96,16 @@ const CheckboxItem: React.FC<CheckboxItemProps> = ({ label, value, isSelected, o
 
 // Practice Areas
 const PRACTICE_AREAS: { label: string; value: AreaOfLaw }[] = [
-  { label: 'Criminal Law', value: 'CRIMINAL' },
-  { label: 'Civil Law', value: 'CIVIL' },
-  { label: 'Corporate Law', value: 'CORPORATE' },
-  { label: 'Family Law', value: 'FAMILY' },
-  { label: 'Property Law', value: 'PROPERTY' },
-  { label: 'Tax Law', value: 'TAX' },
-  { label: 'Labor Law', value: 'LABOR' },
-  { label: 'Immigration', value: 'IMMIGRATION' },
-  { label: 'Intellectual Property', value: 'IP' },
-  { label: 'Environmental', value: 'ENVIRONMENTAL' },
+  { label: 'Criminal Law', value: 'CRIMINAL_LAW' },
+  { label: 'Civil Law', value: 'CIVIL_LAW' },
+  { label: 'Corporate Law', value: 'CORPORATE_LAW' },
+  { label: 'Family Law', value: 'FAMILY_LAW' },
+  { label: 'Property Law', value: 'PROPERTY_LAW' },
+  { label: 'Tax Law', value: 'TAX_LAW' },
+  { label: 'Labor Law', value: 'LABOR_LAW' },
+  { label: 'Banking Law', value: 'BANKING_LAW' },
+  { label: 'Cyber Law', value: 'CYBER_LAW' },
+  { label: 'Constitutional Law', value: 'CONSTITUTIONAL_LAW' },
 ];
 
 // Service Areas (Cities)
@@ -133,6 +133,7 @@ export const LawyerProfileEditScreen: React.FC = () => {
   const navigation = useNavigation();
   const { user } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Form State
   const [formData, setFormData] = useState<FormData>({
@@ -170,15 +171,45 @@ export const LawyerProfileEditScreen: React.FC = () => {
       }),
     ]).start();
 
-    // TODO: Load existing profile data
-    // const loadProfile = async () => {
-    //   const profile = await getLawyerProfile(user?.uid);
-    //   if (profile) {
-    //     setFormData({...});
-    //   }
-    // };
-    // loadProfile();
-  }, []);
+    // Load existing profile data
+    const loadProfile = async () => {
+      if (!user?.uid) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const profile = await getLawyerProfile(user.uid);
+        if (profile) {
+          setFormData({
+            fullName: profile.fullName || user.displayName || '',
+            phone: profile.phone || '',
+            bio: profile.bio || '',
+            barId: profile.barId || '',
+            licenseNumber: profile.licenseNumber || '',
+            experienceYears: profile.experienceYears?.toString() || '',
+            practiceAreas: (profile.specializations || []) as AreaOfLaw[],
+            serviceAreas: profile.serviceAreas || [],
+            consultationFee: profile.consultationFee?.toString() || '',
+            hourlyRate: profile.hourlyRate?.toString() || '',
+            languages: (profile.languages || ['EN']) as ('EN' | 'UR')[],
+            profileImage: profile.profileImage || undefined,
+          });
+        } else {
+          // Set defaults for new profile
+          setFormData(prev => ({
+            ...prev,
+            fullName: user.displayName || '',
+          }));
+        }
+      } catch (error) {
+        console.error('Error loading profile:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadProfile();
+  }, [user?.uid]);
 
   // Update form field
   const updateField = (field: keyof FormData, value: any) => {
@@ -314,6 +345,31 @@ export const LawyerProfileEditScreen: React.FC = () => {
       setIsSaving(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
+        <View style={[styles.header, { backgroundColor: theme.colors.surface.primary }]}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color={theme.colors.text.primary} />
+          </TouchableOpacity>
+          <Text variant="h3" color="primary">
+            Edit Profile
+          </Text>
+          <View style={styles.headerSpacer} />
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.brand.primary} />
+          <Text variant="bodyMedium" color="secondary" style={{ marginTop: 16 }}>
+            Loading profile...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
@@ -862,6 +918,11 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginLeft: 8,
     fontWeight: '600',
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

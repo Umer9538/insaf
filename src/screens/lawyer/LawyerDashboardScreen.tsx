@@ -477,7 +477,7 @@ export const LawyerDashboardScreen: React.FC = () => {
                 variant="elevated"
                 style={[
                   styles.activityCard,
-                  index === recentActivity.length - 1 && styles.lastActivityCard
+                  index === recentActivity.length - 1 ? styles.lastActivityCard : undefined
                 ]}
               >
                 <View style={styles.activityContent}>

@@ -31,7 +31,7 @@ import {
   getEarningsSummary,
   Earning,
   LawyerWallet,
-  subscribeToWallet,
+  subscribeToLawyerWallet,
   subscribeToEarnings,
 } from '../../services/earnings.service';
 import { getEarningsTrend, EarningsTrend } from '../../services/analytics.service';
@@ -139,7 +139,7 @@ export const LawyerEarningsScreen: React.FC = () => {
   useEffect(() => {
     if (!user?.uid) return;
 
-    const unsubscribeWallet = subscribeToWallet(user.uid, (newWallet) => {
+    const unsubscribeWallet = subscribeToLawyerWallet(user.uid, (newWallet) => {
       if (newWallet) {
         setWallet(newWallet);
       }
@@ -539,7 +539,7 @@ export const LawyerEarningsScreen: React.FC = () => {
                 variant="elevated"
                 style={[
                   styles.transactionCard,
-                  index === earnings.length - 1 && styles.lastTransactionCard
+                  index === earnings.length - 1 ? styles.lastTransactionCard : undefined
                 ]}
                 onPress={() => handleTransactionPress(earning)}
               >

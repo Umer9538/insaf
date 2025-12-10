@@ -197,7 +197,7 @@ export const AvailableCasesScreen: React.FC = () => {
               : theme.colors.surface.primary,
             borderColor: isSelected
               ? theme.colors.brand.primary
-              : theme.colors.border.default,
+              : theme.colors.border.light,
           },
         ]}
         onPress={() => handleFilterSelect(item.id)}
@@ -450,7 +450,7 @@ export const AvailableCasesScreen: React.FC = () => {
             styles.searchBar,
             {
               backgroundColor: theme.colors.surface.primary,
-              borderColor: theme.colors.border.default,
+              borderColor: theme.colors.border.light,
             },
           ]}
         >
