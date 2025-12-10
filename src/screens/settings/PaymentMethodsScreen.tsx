@@ -15,6 +15,10 @@ import {
   RefreshControl,
   TextInput,
   Modal,
+  Keyboard,
+  TouchableWithoutFeedback,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -105,14 +109,23 @@ export const PaymentMethodsScreen: React.FC = () => {
 
     setSaving(true);
     try {
-      await addPaymentMethod(user.uid, {
-        type: selectedType,
-        bankName: selectedType === 'BANK_ACCOUNT' ? bankName : undefined,
-        accountTitle: selectedType === 'BANK_ACCOUNT' ? accountTitle : undefined,
-        accountNumber: selectedType === 'BANK_ACCOUNT' ? accountNumber : undefined,
-        phoneNumber: selectedType !== 'BANK_ACCOUNT' ? phoneNumber : undefined,
-        isDefault: paymentMethods.length === 0,
-      });
+      const details = selectedType === 'BANK_ACCOUNT'
+        ? {
+            bankName: bankName.trim(),
+            accountTitle: accountTitle.trim(),
+            accountNumber: accountNumber.trim(),
+          }
+        : {
+            phoneNumber: phoneNumber.trim(),
+            accountName: accountTitle.trim() || undefined,
+          };
+
+      await addPaymentMethod(
+        user.uid,
+        selectedType,
+        details,
+        paymentMethods.length === 0 // setAsDefault if no other methods
+      );
 
       Alert.alert('Success', 'Payment method added successfully');
       setShowAddModal(false);
@@ -126,12 +139,12 @@ export const PaymentMethodsScreen: React.FC = () => {
   };
 
   const handleSetDefault = async (method: PaymentMethod) => {
-    if (!user?.uid || method.isDefault) return;
+    if (!user?.uid || method.isDefault || !method.id) return;
 
     try {
       // Update current default to non-default
       const currentDefault = paymentMethods.find(m => m.isDefault);
-      if (currentDefault) {
+      if (currentDefault?.id) {
         await updateDoc(doc(db, 'paymentMethods', currentDefault.id), { isDefault: false });
       }
 
@@ -146,6 +159,8 @@ export const PaymentMethodsScreen: React.FC = () => {
   };
 
   const handleDeleteMethod = (method: PaymentMethod) => {
+    if (!method.id) return;
+
     Alert.alert(
       'Delete Payment Method',
       `Are you sure you want to delete this ${method.type === 'BANK_ACCOUNT' ? 'bank account' : 'mobile wallet'}?`,
@@ -156,7 +171,7 @@ export const PaymentMethodsScreen: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteDoc(doc(db, 'paymentMethods', method.id));
+              await deleteDoc(doc(db, 'paymentMethods', method.id!));
               Alert.alert('Success', 'Payment method deleted');
               fetchPaymentMethods();
             } catch (error) {
@@ -239,7 +254,7 @@ export const PaymentMethodsScreen: React.FC = () => {
                   <View style={styles.methodInfo}>
                     <View style={styles.methodHeader}>
                       <Text variant="labelLarge" color="primary">
-                        {method.type === 'BANK_ACCOUNT' ? method.bankName : method.type.replace('_', '')}
+                        {method.type === 'BANK_ACCOUNT' ? method.details?.bankName : method.type.replace('_', '')}
                       </Text>
                       {method.isDefault && (
                         <View style={[styles.defaultBadge, { backgroundColor: '#E8F5E9' }]}>
@@ -248,12 +263,12 @@ export const PaymentMethodsScreen: React.FC = () => {
                       )}
                     </View>
                     <Text variant="bodySmall" color="secondary">
-                      {method.type === 'BANK_ACCOUNT' ? method.accountTitle : 'Mobile Wallet'}
+                      {method.type === 'BANK_ACCOUNT' ? method.details?.accountTitle : 'Mobile Wallet'}
                     </Text>
                     <Text variant="caption" color="tertiary">
                       {method.type === 'BANK_ACCOUNT'
-                        ? `****${method.accountNumber?.slice(-4)}`
-                        : method.phoneNumber}
+                        ? `****${method.details?.accountNumber?.slice(-4)}`
+                        : method.details?.phoneNumber}
                     </Text>
                   </View>
 
@@ -289,120 +304,127 @@ export const PaymentMethodsScreen: React.FC = () => {
         animationType="slide"
         onRequestClose={() => setShowAddModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.colors.background.primary }]}>
-            <View style={styles.modalHeader}>
-              <Text variant="h4" color="primary">Add Payment Method</Text>
-              <TouchableOpacity onPress={() => { setShowAddModal(false); resetForm(); }}>
-                <Ionicons name="close" size={24} color={theme.colors.text.primary} />
-              </TouchableOpacity>
-            </View>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.modalOverlay}>
+              <View style={[styles.modalContent, { backgroundColor: theme.colors.background.primary }]}>
+                <View style={styles.modalHeader}>
+                  <Text variant="h4" color="primary">Add Payment Method</Text>
+                  <TouchableOpacity onPress={() => { setShowAddModal(false); resetForm(); Keyboard.dismiss(); }}>
+                    <Ionicons name="close" size={24} color={theme.colors.text.primary} />
+                  </TouchableOpacity>
+                </View>
 
-            {/* Type Selection */}
-            <Text variant="labelMedium" color="secondary" style={styles.modalLabel}>
-              Method Type
-            </Text>
-            <View style={styles.typeSelector}>
-              {PAYMENT_METHOD_TYPES.map(type => (
+                {/* Type Selection */}
+                <Text variant="labelMedium" color="secondary" style={styles.modalLabel}>
+                  Method Type
+                </Text>
+                <View style={styles.typeSelector}>
+                  {PAYMENT_METHOD_TYPES.map(type => (
+                    <TouchableOpacity
+                      key={type.type}
+                      style={[
+                        styles.typeOption,
+                        {
+                          backgroundColor: selectedType === type.type
+                            ? theme.colors.brand.primary
+                            : theme.colors.background.secondary,
+                        },
+                      ]}
+                      onPress={() => setSelectedType(type.type)}
+                    >
+                      <Ionicons
+                        name={type.icon}
+                        size={18}
+                        color={selectedType === type.type ? '#FFFFFF' : theme.colors.text.secondary}
+                      />
+                      <Text
+                        variant="labelSmall"
+                        style={{
+                          color: selectedType === type.type ? '#FFFFFF' : theme.colors.text.secondary,
+                          marginLeft: 4,
+                        }}
+                      >
+                        {type.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* Bank Account Fields */}
+                {selectedType === 'BANK_ACCOUNT' && (
+                  <>
+                    <Text variant="labelMedium" color="secondary" style={styles.modalLabel}>
+                      Bank Name
+                    </Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: theme.colors.background.secondary, color: theme.colors.text.primary }]}
+                      value={bankName}
+                      onChangeText={setBankName}
+                      placeholder="e.g., HBL, UBL, Meezan"
+                      placeholderTextColor={theme.colors.text.tertiary}
+                    />
+
+                    <Text variant="labelMedium" color="secondary" style={styles.modalLabel}>
+                      Account Title
+                    </Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: theme.colors.background.secondary, color: theme.colors.text.primary }]}
+                      value={accountTitle}
+                      onChangeText={setAccountTitle}
+                      placeholder="Name on account"
+                      placeholderTextColor={theme.colors.text.tertiary}
+                    />
+
+                    <Text variant="labelMedium" color="secondary" style={styles.modalLabel}>
+                      Account Number / IBAN
+                    </Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: theme.colors.background.secondary, color: theme.colors.text.primary }]}
+                      value={accountNumber}
+                      onChangeText={setAccountNumber}
+                      placeholder="Enter account number"
+                      placeholderTextColor={theme.colors.text.tertiary}
+                      keyboardType="default"
+                    />
+                  </>
+                )}
+
+                {/* Mobile Wallet Fields */}
+                {selectedType !== 'BANK_ACCOUNT' && (
+                  <>
+                    <Text variant="labelMedium" color="secondary" style={styles.modalLabel}>
+                      Phone Number
+                    </Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: theme.colors.background.secondary, color: theme.colors.text.primary }]}
+                      value={phoneNumber}
+                      onChangeText={setPhoneNumber}
+                      placeholder="03XX XXXXXXX"
+                      placeholderTextColor={theme.colors.text.tertiary}
+                      keyboardType="phone-pad"
+                    />
+                  </>
+                )}
+
                 <TouchableOpacity
-                  key={type.type}
-                  style={[
-                    styles.typeOption,
-                    {
-                      backgroundColor: selectedType === type.type
-                        ? theme.colors.brand.primary
-                        : theme.colors.background.secondary,
-                    },
-                  ]}
-                  onPress={() => setSelectedType(type.type)}
+                  style={[styles.saveButton, { backgroundColor: theme.colors.brand.primary }]}
+                  onPress={() => { handleAddMethod(); Keyboard.dismiss(); }}
+                  disabled={saving}
                 >
-                  <Ionicons
-                    name={type.icon}
-                    size={18}
-                    color={selectedType === type.type ? '#FFFFFF' : theme.colors.text.secondary}
-                  />
-                  <Text
-                    variant="labelSmall"
-                    style={{
-                      color: selectedType === type.type ? '#FFFFFF' : theme.colors.text.secondary,
-                      marginLeft: 4,
-                    }}
-                  >
-                    {type.label}
-                  </Text>
+                  {saving ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text variant="labelLarge" style={{ color: '#FFFFFF' }}>Add Method</Text>
+                  )}
                 </TouchableOpacity>
-              ))}
+              </View>
             </View>
-
-            {/* Bank Account Fields */}
-            {selectedType === 'BANK_ACCOUNT' && (
-              <>
-                <Text variant="labelMedium" color="secondary" style={styles.modalLabel}>
-                  Bank Name
-                </Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: theme.colors.background.secondary, color: theme.colors.text.primary }]}
-                  value={bankName}
-                  onChangeText={setBankName}
-                  placeholder="e.g., HBL, UBL, Meezan"
-                  placeholderTextColor={theme.colors.text.tertiary}
-                />
-
-                <Text variant="labelMedium" color="secondary" style={styles.modalLabel}>
-                  Account Title
-                </Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: theme.colors.background.secondary, color: theme.colors.text.primary }]}
-                  value={accountTitle}
-                  onChangeText={setAccountTitle}
-                  placeholder="Name on account"
-                  placeholderTextColor={theme.colors.text.tertiary}
-                />
-
-                <Text variant="labelMedium" color="secondary" style={styles.modalLabel}>
-                  Account Number / IBAN
-                </Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: theme.colors.background.secondary, color: theme.colors.text.primary }]}
-                  value={accountNumber}
-                  onChangeText={setAccountNumber}
-                  placeholder="Enter account number"
-                  placeholderTextColor={theme.colors.text.tertiary}
-                  keyboardType="default"
-                />
-              </>
-            )}
-
-            {/* Mobile Wallet Fields */}
-            {selectedType !== 'BANK_ACCOUNT' && (
-              <>
-                <Text variant="labelMedium" color="secondary" style={styles.modalLabel}>
-                  Phone Number
-                </Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: theme.colors.background.secondary, color: theme.colors.text.primary }]}
-                  value={phoneNumber}
-                  onChangeText={setPhoneNumber}
-                  placeholder="03XX XXXXXXX"
-                  placeholderTextColor={theme.colors.text.tertiary}
-                  keyboardType="phone-pad"
-                />
-              </>
-            )}
-
-            <TouchableOpacity
-              style={[styles.saveButton, { backgroundColor: theme.colors.brand.primary }]}
-              onPress={handleAddMethod}
-              disabled={saving}
-            >
-              {saving ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text variant="labelLarge" style={{ color: '#FFFFFF' }}>Add Method</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
