@@ -36,3 +36,6 @@ export * from './notification.service';
 // AI Services (Law Coach & Law Assistant)
 export * from './ai.service';
 
+// Document Generation Service
+export * from './documentGeneration.service';
+

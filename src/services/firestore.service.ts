@@ -40,6 +40,8 @@ export const COLLECTIONS = {
   DISPUTES: 'disputes',
   AI_MESSAGES: 'aiMessages', // AI chatbot messages
   AI_SESSIONS: 'aiSessions', // AI chat sessions
+  DOCUMENT_TEMPLATES: 'documentTemplates', // Legal document templates
+  GENERATED_DOCUMENTS: 'generatedDocuments', // User-generated documents
 } as const;
 
 // Generic CRUD operations

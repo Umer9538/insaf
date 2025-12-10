@@ -16,6 +16,7 @@ export const STORAGE_PATHS = {
   LAWYER_DOCUMENTS: 'lawyerDocuments', // Verification docs (Bar ID, License)
   CASE_DOCUMENTS: 'caseDocuments',
   CONSULTATION_RECORDINGS: 'consultationRecordings',
+  GENERATED_DOCUMENTS: 'generatedDocuments', // Generated legal documents (PDFs)
 } as const;
 
 // Upload file and get download URL
@@ -135,4 +136,15 @@ export const listFiles = async (path: string): Promise<string[]> => {
   } catch (error) {
     throw error;
   }
+};
+
+// Upload generated legal document (PDF)
+export const uploadGeneratedDocument = async (
+  userId: string,
+  documentId: string,
+  file: Blob | Uint8Array | ArrayBuffer,
+  fileExtension: string = 'pdf'
+): Promise<string> => {
+  const fileName = `${userId}/${documentId}_${Date.now()}.${fileExtension}`;
+  return uploadFile(STORAGE_PATHS.GENERATED_DOCUMENTS, file, fileName);
 };
