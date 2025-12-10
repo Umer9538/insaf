@@ -26,6 +26,10 @@ import { getFollowStats, FollowStats } from '../../services/follow.service';
 import { useAuth } from '../../context/AuthContext';
 import { LawyerProfile, getLawyerProfile } from '../../services/lawyer.service';
 import { Card } from '../../components/common/Card';
+import { createConversation } from '../../services/chat.service';
+import { getLawyerReviews, Review } from '../../services/review.service';
+import { getLawyerAvailability, LawyerAvailability } from '../../services/consultation.service';
+import { formatDistanceToNow } from 'date-fns';
 
 const { width } = Dimensions.get('window');
 
@@ -66,6 +70,11 @@ export const LawyerDetailScreen = () => {
   const [loading, setLoading] = useState(true);
   const [lawyer, setLawyer] = useState<LawyerProfile | null>(null);
   const [followStats, setFollowStats] = useState<FollowStats>({ followerCount: 0, followingCount: 0, isFollowing: false });
+  const [startingChat, setStartingChat] = useState(false);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [availability, setAvailability] = useState<LawyerAvailability | null>(null);
+  const [loadingReviews, setLoadingReviews] = useState(false);
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
 
   // Use passed lawyerId or fallback to sample ID if testing
   const lawyerId = route.params?.lawyerId || LAWYER_DATA.id;
@@ -134,12 +143,81 @@ export const LawyerDetailScreen = () => {
     }
   };
 
+  // Fetch reviews when tab is clicked
+  const fetchReviews = async () => {
+    if (reviews.length > 0) return; // Already fetched
+    setLoadingReviews(true);
+    try {
+      const fetchedReviews = await getLawyerReviews(lawyerId);
+      setReviews(fetchedReviews);
+    } catch (error) {
+      console.error('Error fetching reviews:', error);
+    } finally {
+      setLoadingReviews(false);
+    }
+  };
+
+  // Fetch availability when tab is clicked
+  const fetchAvailability = async () => {
+    if (availability) return; // Already fetched
+    setLoadingAvailability(true);
+    try {
+      const fetchedAvailability = await getLawyerAvailability(lawyerId);
+      setAvailability(fetchedAvailability);
+    } catch (error) {
+      console.error('Error fetching availability:', error);
+    } finally {
+      setLoadingAvailability(false);
+    }
+  };
+
+  // Handle tab change
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    if (tab === 'reviews') fetchReviews();
+    if (tab === 'availability') fetchAvailability();
+  };
+
   const handleFollowChange = (isFollowing: boolean) => {
     setFollowStats(prev => ({
       ...prev,
       isFollowing,
       followerCount: isFollowing ? prev.followerCount + 1 : prev.followerCount - 1
     }));
+  };
+
+  const handleStartChat = async () => {
+    if (!user || !lawyer) return;
+
+    setStartingChat(true);
+    try {
+      // Create or get existing conversation
+      const conversationId = await createConversation(
+        [
+          {
+            userId: user.uid,
+            userName: user.displayName || 'User',
+            userRole: 'client',
+          },
+          {
+            userId: lawyer.userId,
+            userName: lawyer.fullName,
+            userRole: 'lawyer',
+          },
+        ],
+        undefined, // caseId
+        'direct',  // type
+        undefined, // title
+        user.uid   // createdBy
+      );
+
+      // Navigate to chat detail
+      navigation.navigate('ChatDetail', { conversationId });
+    } catch (error) {
+      console.error('Error starting chat:', error);
+    } finally {
+      setStartingChat(false);
+    }
   };
 
   if (loading || !lawyer) {
@@ -267,7 +345,7 @@ export const LawyerDetailScreen = () => {
         <View style={[styles.tabs, { backgroundColor: theme.colors.background.primary }]}>
           <TouchableOpacity
             style={[styles.tab, activeTab === 'about' && styles.activeTab]}
-            onPress={() => setActiveTab('about')}
+            onPress={() => handleTabChange('about')}
           >
             <Text
               variant="labelLarge"
@@ -279,7 +357,7 @@ export const LawyerDetailScreen = () => {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tab, activeTab === 'reviews' && styles.activeTab]}
-            onPress={() => setActiveTab('reviews')}
+            onPress={() => handleTabChange('reviews')}
           >
             <Text
               variant="labelLarge"
@@ -291,7 +369,7 @@ export const LawyerDetailScreen = () => {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tab, activeTab === 'availability' && styles.activeTab]}
-            onPress={() => setActiveTab('availability')}
+            onPress={() => handleTabChange('availability')}
           >
             <Text
               variant="labelLarge"
@@ -342,13 +420,104 @@ export const LawyerDetailScreen = () => {
 
           {activeTab === 'reviews' && (
             <View style={styles.section}>
-              <Text variant="bodyMedium" color="secondary">Reviews coming soon...</Text>
+              {loadingReviews ? (
+                <ActivityIndicator size="small" color={theme.colors.brand.primary} style={{ marginTop: 20 }} />
+              ) : reviews.length === 0 ? (
+                <View style={styles.emptyReviews}>
+                  <Ionicons name="star-outline" size={48} color={theme.colors.text.tertiary} />
+                  <Text variant="bodyMedium" color="secondary" style={{ marginTop: 12, textAlign: 'center' }}>
+                    No reviews yet
+                  </Text>
+                  <Text variant="caption" color="tertiary" style={{ marginTop: 4, textAlign: 'center' }}>
+                    Be the first to review after completing a case
+                  </Text>
+                </View>
+              ) : (
+                reviews.map((review) => (
+                  <Card key={review.id} style={styles.reviewCard}>
+                    <View style={styles.reviewHeader}>
+                      <View style={styles.reviewerInfo}>
+                        <View style={styles.reviewerAvatar}>
+                          <Ionicons name="person" size={16} color="#fff" />
+                        </View>
+                        <View>
+                          <Text variant="labelMedium" color="primary">{review.clientName}</Text>
+                          <Text variant="caption" color="tertiary">
+                            {review.createdAt?.toDate ? formatDistanceToNow(review.createdAt.toDate(), { addSuffix: true }) : 'Recently'}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.ratingBadge}>
+                        <Ionicons name="star" size={12} color="#d4af37" />
+                        <Text variant="labelSmall" style={{ color: '#d4af37', marginLeft: 4 }}>{review.rating}</Text>
+                      </View>
+                    </View>
+                    {review.title && (
+                      <Text variant="labelMedium" color="primary" style={{ marginTop: 8 }}>{review.title}</Text>
+                    )}
+                    <Text variant="bodySmall" color="secondary" style={{ marginTop: 4 }}>
+                      {review.content}
+                    </Text>
+                    {review.lawyerResponse && (
+                      <View style={[styles.lawyerResponse, { backgroundColor: theme.colors.surface.secondary }]}>
+                        <Text variant="caption" color="tertiary">Lawyer's Response:</Text>
+                        <Text variant="bodySmall" color="secondary" style={{ marginTop: 4 }}>
+                          {review.lawyerResponse.content}
+                        </Text>
+                      </View>
+                    )}
+                  </Card>
+                ))
+              )}
             </View>
           )}
 
           {activeTab === 'availability' && (
             <View style={styles.section}>
-              <Text variant="bodyMedium" color="secondary">Availability calendar coming soon...</Text>
+              {loadingAvailability ? (
+                <ActivityIndicator size="small" color={theme.colors.brand.primary} style={{ marginTop: 20 }} />
+              ) : !availability ? (
+                <View style={styles.emptyAvailability}>
+                  <Ionicons name="calendar-outline" size={48} color={theme.colors.text.tertiary} />
+                  <Text variant="bodyMedium" color="secondary" style={{ marginTop: 12, textAlign: 'center' }}>
+                    Availability not set
+                  </Text>
+                  <Text variant="caption" color="tertiary" style={{ marginTop: 4, textAlign: 'center' }}>
+                    The lawyer hasn't configured their availability yet
+                  </Text>
+                </View>
+              ) : (
+                <View>
+                  <Text variant="h4" color="primary" style={{ marginBottom: 16 }}>Weekly Schedule</Text>
+                  {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day, index) => {
+                    const schedule = availability.weeklySchedule?.[index];
+                    return (
+                      <View key={day} style={styles.scheduleRow}>
+                        <Text variant="labelMedium" color={schedule?.enabled ? 'primary' : 'tertiary'} style={{ width: 100 }}>
+                          {day}
+                        </Text>
+                        {schedule?.enabled && schedule.slots?.length > 0 ? (
+                          <View style={styles.timeSlotsContainer}>
+                            {schedule.slots.map((slot, slotIndex) => (
+                              <View key={slotIndex} style={[styles.timeSlot, { backgroundColor: theme.colors.surface.secondary }]}>
+                                <Text variant="caption" color="secondary">
+                                  {slot.startTime} - {slot.endTime}
+                                </Text>
+                              </View>
+                            ))}
+                          </View>
+                        ) : (
+                          <Text variant="caption" color="tertiary">Unavailable</Text>
+                        )}
+                      </View>
+                    );
+                  })}
+                  <View style={styles.consultationInfo}>
+                    <Text variant="labelMedium" color="primary">Consultation Duration: </Text>
+                    <Text variant="bodyMedium" color="secondary">{availability.consultationDuration || 30} minutes</Text>
+                  </View>
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -360,18 +529,21 @@ export const LawyerDetailScreen = () => {
       {/* Bottom Action Bar */}
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16, backgroundColor: theme.colors.surface.primary }]}>
         <View style={styles.bottomBarContent}>
-          <View style={{ flex: 1, marginRight: 16 }}>
-            <FollowButton
-              lawyerId={lawyerId}
-              lawyerName={lawyer?.fullName || 'Lawyer'}
-              onFollowChange={handleFollowChange}
-              isFollowing={followStats.isFollowing}
-            />
-          </View>
+          <TouchableOpacity
+            style={[styles.messageButton, { backgroundColor: theme.colors.surface.secondary }]}
+            onPress={handleStartChat}
+            disabled={startingChat}
+          >
+            {startingChat ? (
+              <ActivityIndicator size="small" color={theme.colors.brand.primary} />
+            ) : (
+              <Ionicons name="chatbubble-outline" size={24} color={theme.colors.brand.primary} />
+            )}
+          </TouchableOpacity>
           <Button
             label="Book Consultation"
             onPress={() => navigation.navigate('BookConsultation', { lawyerId })}
-            style={{ flex: 2 }}
+            style={{ flex: 1, marginLeft: 12 }}
           />
         </View>
       </View>
@@ -556,5 +728,80 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  messageButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyReviews: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  reviewCard: {
+    padding: 16,
+    marginBottom: 12,
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  reviewerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  reviewerAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#1a365d',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  ratingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(212, 175, 55, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  lawyerResponse: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 8,
+  },
+  emptyAvailability: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  scheduleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  timeSlotsContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  timeSlot: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  consultationInfo: {
+    flexDirection: 'row',
+    marginTop: 20,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
   },
 });

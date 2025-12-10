@@ -4,7 +4,7 @@
  * Individual chat conversation with a lawyer
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -13,96 +13,157 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../context/ThemeContext';
 import { Text } from '../../components/common/Text';
+import { useAuth } from '../../context/AuthContext';
+import {
+  subscribeToMessages,
+  sendMessage as sendChatMessage,
+  markMessagesAsRead,
+  getConversation,
+  Message,
+  Conversation,
+} from '../../services/chat.service';
+import { format } from 'date-fns';
 
-// Sample Messages Data
-const MESSAGES = [
-  {
-    id: '1',
-    text: 'Hello! I have reviewed your case documents.',
-    sender: 'lawyer',
-    time: '10:30 AM',
-    date: 'Today',
-  },
-  {
-    id: '2',
-    text: 'Based on my initial assessment, you have a strong case for property ownership.',
-    sender: 'lawyer',
-    time: '10:31 AM',
-    date: 'Today',
-  },
-  {
-    id: '3',
-    text: 'That sounds promising! What are the next steps?',
-    sender: 'user',
-    time: '10:35 AM',
-    date: 'Today',
-  },
-  {
-    id: '4',
-    text: 'We need to gather additional evidence and file a petition in the civil court. I recommend scheduling a consultation to discuss the details.',
-    sender: 'lawyer',
-    time: '10:40 AM',
-    date: 'Today',
-  },
-  {
-    id: '5',
-    text: 'How long will the entire process take?',
-    sender: 'user',
-    time: '10:42 AM',
-    date: 'Today',
-  },
-  {
-    id: '6',
-    text: 'Property disputes typically take 6-12 months, depending on the complexity and court schedule. However, we can pursue an expedited hearing if needed.',
-    sender: 'lawyer',
-    time: '10:45 AM',
-    date: 'Today',
-  },
-  {
-    id: '7',
-    text: 'I understand. Can we schedule a video consultation this week?',
-    sender: 'user',
-    time: '10:48 AM',
-    date: 'Today',
-  },
-  {
-    id: '8',
-    text: 'Absolutely! I have availability on Thursday at 3 PM or Friday at 11 AM. Which works better for you?',
-    sender: 'lawyer',
-    time: '10:50 AM',
-    date: 'Today',
-  },
-];
+interface DisplayMessage {
+  id: string;
+  text: string;
+  sender: 'user' | 'other';
+  time: string;
+  date: string;
+  status?: string;
+}
 
-const LAWYER_INFO = {
-  name: 'Adv. Ahmad Khan',
-  specialty: 'Property Law',
-  online: true,
-  caseTitle: 'Property Dispute',
-};
+interface RouteParams {
+  conversationId: string;
+}
 
 export const ChatDetailScreen: React.FC = () => {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const route = useRoute();
+  const { conversationId } = (route.params as RouteParams) || {};
+  const { user } = useAuth();
+
   const [message, setMessage] = useState('');
+  const [messages, setMessages] = useState<DisplayMessage[]>([]);
+  const [conversation, setConversation] = useState<Conversation | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
-  const sendMessage = () => {
-    if (message.trim()) {
-      // TODO: Send message logic
-      setMessage('');
+  // Get conversation details
+  useEffect(() => {
+    const fetchConversation = async () => {
+      if (!conversationId) return;
+      try {
+        const conv = await getConversation(conversationId);
+        setConversation(conv);
+      } catch (error) {
+        console.error('Error fetching conversation:', error);
+      }
+    };
+    fetchConversation();
+  }, [conversationId]);
+
+  // Transform Firestore message to display format
+  const transformMessage = useCallback((msg: Message): DisplayMessage => {
+    const isCurrentUser = msg.senderId === user?.uid;
+
+    let timeDisplay = '';
+    let dateDisplay = '';
+    if (msg.createdAt) {
+      try {
+        const date = msg.createdAt.toDate();
+        timeDisplay = format(date, 'h:mm a');
+        dateDisplay = format(date, 'MMM d, yyyy');
+      } catch {
+        timeDisplay = '';
+        dateDisplay = '';
+      }
+    }
+
+    return {
+      id: msg.id,
+      text: msg.text,
+      sender: isCurrentUser ? 'user' : 'other',
+      time: timeDisplay,
+      date: dateDisplay,
+      status: msg.status,
+    };
+  }, [user?.uid]);
+
+  // Subscribe to messages
+  useFocusEffect(
+    useCallback(() => {
+      if (!conversationId || !user?.uid) {
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      const unsubscribe = subscribeToMessages(conversationId, (msgs) => {
+        const displayMsgs = msgs.map(transformMessage);
+        setMessages(displayMsgs);
+        setIsLoading(false);
+      });
+
+      // Mark messages as read when opening the chat
+      markMessagesAsRead(conversationId, user.uid).catch(console.error);
+
+      return () => unsubscribe();
+    }, [conversationId, user?.uid, transformMessage])
+  );
+
+  // Get other participant info for header
+  const otherParticipant = conversation?.participants.find(p => p.userId !== user?.uid);
+  const chatInfo = {
+    name: otherParticipant?.userName || 'Chat',
+    role: otherParticipant?.userRole || '',
+    online: false, // TODO: Implement presence
+    caseTitle: conversation?.caseId ? 'Case Discussion' : null,
+  };
+
+  const handleSendMessage = async () => {
+    if (!message.trim() || !conversationId || !user) return;
+
+    const messageText = message.trim();
+    setMessage('');
+    setIsSending(true);
+
+    try {
+      await sendChatMessage(
+        conversationId,
+        user.uid,
+        user.displayName || 'User',
+        messageText,
+        undefined, // attachments
+        undefined, // avatar
+        undefined  // replyTo
+      );
+      // Scroll to bottom after sending
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      Alert.alert('Error', 'Failed to send message. Please try again.');
+      setMessage(messageText); // Restore the message
+    } finally {
+      setIsSending(false);
     }
   };
 
-  const renderMessage = ({ item, index }: { item: typeof MESSAGES[0]; index: number }) => {
+  const renderMessage = ({ item, index }: { item: DisplayMessage; index: number }) => {
     const isUser = item.sender === 'user';
 
     return (
@@ -126,15 +187,25 @@ export const ChatDetailScreen: React.FC = () => {
           >
             {item.text}
           </Text>
-          <Text
-            variant="caption"
-            style={[
-              styles.messageTime,
-              { color: isUser ? 'rgba(255,255,255,0.7)' : theme.colors.text.tertiary },
-            ]}
-          >
-            {item.time}
-          </Text>
+          <View style={styles.messageFooter}>
+            <Text
+              variant="caption"
+              style={[
+                styles.messageTime,
+                { color: isUser ? 'rgba(255,255,255,0.7)' : theme.colors.text.tertiary },
+              ]}
+            >
+              {item.time}
+            </Text>
+            {isUser && item.status && (
+              <Ionicons
+                name={item.status === 'read' ? 'checkmark-done' : 'checkmark'}
+                size={14}
+                color={isUser ? 'rgba(255,255,255,0.7)' : theme.colors.text.tertiary}
+                style={{ marginLeft: 4 }}
+              />
+            )}
+          </View>
         </View>
       </View>
     );
@@ -158,14 +229,14 @@ export const ChatDetailScreen: React.FC = () => {
           <View style={styles.headerInfo}>
             <View style={styles.headerRow}>
               <Text variant="labelLarge" style={styles.headerName}>
-                {LAWYER_INFO.name}
+                {chatInfo.name}
               </Text>
-              {LAWYER_INFO.online && (
+              {chatInfo.online && (
                 <View style={styles.onlineIndicator} />
               )}
             </View>
             <Text variant="caption" style={styles.headerSubtitle}>
-              {LAWYER_INFO.caseTitle} • {LAWYER_INFO.online ? 'Online' : 'Offline'}
+              {chatInfo.caseTitle ? `${chatInfo.caseTitle} • ` : ''}{chatInfo.online ? 'Online' : 'Offline'}
             </Text>
           </View>
 
@@ -181,15 +252,38 @@ export const ChatDetailScreen: React.FC = () => {
       </LinearGradient>
 
       {/* Messages */}
-      <FlatList
-        ref={flatListRef}
-        data={MESSAGES}
-        keyExtractor={(item) => item.id}
-        renderItem={renderMessage}
-        contentContainerStyle={styles.messagesContainer}
-        showsVerticalScrollIndicator={false}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
-      />
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.brand.primary} />
+          <Text variant="bodySmall" color="secondary" style={{ marginTop: 16 }}>
+            Loading messages...
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          renderItem={renderMessage}
+          contentContainerStyle={[
+            styles.messagesContainer,
+            messages.length === 0 && styles.emptyMessagesContainer,
+          ]}
+          showsVerticalScrollIndicator={false}
+          onContentSizeChange={() => flatListRef.current?.scrollToEnd()}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Ionicons name="chatbubble-outline" size={64} color={theme.colors.text.tertiary} />
+              <Text variant="h4" color="secondary" style={{ marginTop: 16 }}>
+                No messages yet
+              </Text>
+              <Text variant="bodySmall" color="tertiary" style={{ textAlign: 'center', marginTop: 8 }}>
+                Start the conversation by sending a message
+              </Text>
+            </View>
+          }
+        />
+      )}
 
       {/* Quick Actions */}
       <View style={[styles.quickActions, { backgroundColor: theme.colors.surface.primary }]}>
@@ -234,13 +328,18 @@ export const ChatDetailScreen: React.FC = () => {
 
           <TouchableOpacity
             style={styles.sendButton}
-            onPress={sendMessage}
+            onPress={handleSendMessage}
+            disabled={isSending || !message.trim()}
           >
             <LinearGradient
               colors={['#d4af37', '#f4d03f']}
-              style={styles.sendButtonGradient}
+              style={[styles.sendButtonGradient, (isSending || !message.trim()) && { opacity: 0.5 }]}
             >
-              <Ionicons name="send" size={20} color="#1a365d" />
+              {isSending ? (
+                <ActivityIndicator size="small" color="#1a365d" />
+              ) : (
+                <Ionicons name="send" size={20} color="#1a365d" />
+              )}
             </LinearGradient>
           </TouchableOpacity>
         </View>
@@ -308,6 +407,19 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 8,
   },
+  emptyMessagesContainer: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
   messageContainer: {
     flexDirection: 'row',
     marginBottom: 16,
@@ -331,8 +443,13 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderBottomLeftRadius: 4,
   },
-  messageTime: {
+  messageFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginTop: 6,
+    alignSelf: 'flex-end',
+  },
+  messageTime: {
     alignSelf: 'flex-end',
   },
   quickActions: {
