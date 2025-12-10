@@ -4,7 +4,7 @@
  * User profile and settings
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -13,14 +13,16 @@ import {
   Switch,
   Alert,
   Animated,
+  RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme, useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { Text } from '../../components/common/Text';
+import { getClientCases } from '../../services/case.service';
 
 // Menu Sections
 const PROFILE_MENU = [
@@ -30,6 +32,7 @@ const PROFILE_MENU = [
       { id: 'edit', icon: 'person-outline', label: 'Edit Profile', route: 'EditProfile' },
       { id: 'verification', icon: 'shield-checkmark-outline', label: 'Verification Status', route: 'Verification' },
       { id: 'documents', icon: 'document-text-outline', label: 'My Documents', route: 'Documents' },
+      { id: 'legal-docs', icon: 'newspaper-outline', label: 'Legal Documents', route: 'DocumentTemplates' },
     ],
   },
   {
@@ -72,11 +75,49 @@ export const ProfileScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { user, logout } = useAuth();
 
+  const [refreshing, setRefreshing] = useState(false);
+  const [stats, setStats] = useState({ activeCases: 0, totalCases: 0, rating: 0 });
+
   // Animated values
   const headerAnim = useRef(new Animated.Value(0)).current;
   const statsAnim = useRef(new Animated.Value(0)).current;
   const menuAnims = useRef(PROFILE_MENU.map(() => new Animated.Value(0))).current;
   const logoutAnim = useRef(new Animated.Value(0)).current;
+
+  // Fetch profile stats
+  const fetchStats = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      const cases = await getClientCases(user.uid);
+      const activeCases = cases.filter(c =>
+        ['ASSIGNED', 'IN_PROGRESS', 'active', 'BIDDING', 'POSTED'].includes(c.status)
+      ).length;
+      const totalCases = cases.length;
+
+      setStats({
+        activeCases,
+        totalCases,
+        rating: 4.8, // Would come from reviews in real implementation
+      });
+    } catch (error) {
+      console.error('Error fetching profile stats:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [user]);
+
+  // Fetch on focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchStats();
+    }, [fetchStats])
+  );
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchStats();
+  }, [fetchStats]);
 
   useEffect(() => {
     const animations = [
@@ -138,7 +179,17 @@ export const ProfileScreen: React.FC = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background.primary }]}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.colors.brand.primary}
+            colors={[theme.colors.brand.primary]}
+          />
+        }
+      >
         {/* Header */}
         <LinearGradient
           colors={theme.colors.gradient.primary as [string, string]}
@@ -200,17 +251,17 @@ export const ProfileScreen: React.FC = () => {
               ]}
             >
               <View style={styles.statItem}>
-                <Text variant="h3" style={styles.statValue}>3</Text>
+                <Text variant="h3" style={styles.statValue}>{stats.activeCases}</Text>
                 <Text variant="caption" style={styles.statLabel}>Active Cases</Text>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
-                <Text variant="h3" style={styles.statValue}>12</Text>
+                <Text variant="h3" style={styles.statValue}>{stats.totalCases}</Text>
                 <Text variant="caption" style={styles.statLabel}>Total Cases</Text>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
-                <Text variant="h3" style={styles.statValue}>4.8</Text>
+                <Text variant="h3" style={styles.statValue}>{stats.rating.toFixed(1)}</Text>
                 <Text variant="caption" style={styles.statLabel}>Rating</Text>
               </View>
             </Animated.View>

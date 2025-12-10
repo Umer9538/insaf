@@ -28,6 +28,16 @@ import { CaseDetailScreen } from '../screens/detail/CaseDetailScreen';
 import { ChatDetailScreen } from '../screens/detail/ChatDetailScreen';
 import { CreateCaseScreen } from '../screens/detail/CreateCaseScreen';
 import { NotificationsScreen } from '../screens/detail/NotificationsScreen';
+import { BookConsultationScreen } from '../screens/detail/BookConsultationScreen';
+import { CaseThreadScreen } from '../screens/detail/CaseThreadScreen';
+
+// Document Generation Screens
+import {
+  DocumentTemplatesScreen,
+  DocumentGeneratorScreen,
+  DocumentPreviewScreen,
+  MyDocumentsScreen,
+} from '../screens/documents';
 
 // Settings Screens
 import {
@@ -199,6 +209,38 @@ export const MainNavigator: React.FC = () => {
         name="LawCoach"
         component={LawCoachScreen}
         options={{ animation: 'slide_from_bottom' }}
+      />
+      <Stack.Screen
+        name="BookConsultation"
+        component={BookConsultationScreen}
+        options={{ animation: 'slide_from_bottom' }}
+      />
+      <Stack.Screen
+        name="CaseThread"
+        component={CaseThreadScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+
+      {/* Document Generation Screens */}
+      <Stack.Screen
+        name="DocumentTemplates"
+        component={DocumentTemplatesScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="DocumentGenerator"
+        component={DocumentGeneratorScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="DocumentPreview"
+        component={DocumentPreviewScreen}
+        options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
+      />
+      <Stack.Screen
+        name="MyDocuments"
+        component={MyDocumentsScreen}
+        options={{ animation: 'slide_from_right' }}
       />
 
       {/* Settings Screens */}
