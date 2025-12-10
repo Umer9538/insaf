@@ -10,7 +10,7 @@ import {
   onAuthStateChanged,
   Unsubscribe,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 
 // User roles as defined in PRD
@@ -61,6 +61,35 @@ export const registerUser = async (
     };
 
     await setDoc(doc(db, 'users', user.uid), userProfile);
+
+    // If registering as a lawyer, also create a lawyerProfiles entry
+    if (role === 'LAWYER' || role === 'LAW_FIRM') {
+      const lawyerProfile = {
+        userId: user.uid,
+        email: email,
+        fullName: displayName,
+        barId: '',
+        licenseNumber: '',
+        specializations: [],
+        experienceYears: 0,
+        education: [],
+        serviceAreas: [],
+        bio: '',
+        languages: ['EN'],
+        availabilityStatus: 'AVAILABLE',
+        verificationStatus: 'PENDING', // Will need verification
+        ratingAverage: 0,
+        totalReviews: 0,
+        totalCasesCompleted: 0,
+        followerCount: 0,
+        followingCount: 0,
+        documents: {},
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(doc(db, 'lawyerProfiles', user.uid), lawyerProfile);
+    }
 
     return userCredential;
   } catch (error) {

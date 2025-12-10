@@ -21,6 +21,7 @@ export interface LawyerProfile {
   userId: string;
   email: string;
   fullName: string;
+  phone?: string;
   cnic?: string; // Encrypted
   barId: string;
   licenseNumber: string;
@@ -175,11 +176,21 @@ export const verifyLawyerCredentials = async (
 };
 
 // Get all verified lawyers
-export const getVerifiedLawyers = async (): Promise<LawyerProfile[]> => {
-  console.log('getVerifiedLawyers: Querying Firestore...');
-  const lawyers = await getDocuments<LawyerProfile>(COLLECTIONS.LAWYER_PROFILES, [
-    where('verificationStatus', '==', 'VERIFIED'),
-  ]);
+export const getVerifiedLawyers = async (includeAll: boolean = false): Promise<LawyerProfile[]> => {
+  console.log('getVerifiedLawyers: Querying Firestore..., includeAll:', includeAll);
+
+  let lawyers: LawyerProfile[];
+
+  if (includeAll) {
+    // Get all lawyers regardless of verification status (for testing/development)
+    lawyers = await getDocuments<LawyerProfile>(COLLECTIONS.LAWYER_PROFILES, []);
+  } else {
+    // Get only verified lawyers (production)
+    lawyers = await getDocuments<LawyerProfile>(COLLECTIONS.LAWYER_PROFILES, [
+      where('verificationStatus', '==', 'VERIFIED'),
+    ]);
+  }
+
   console.log('getVerifiedLawyers: Found documents:', lawyers.length);
   return lawyers.sort((a, b) => (b.ratingAverage || 0) - (a.ratingAverage || 0));
 };

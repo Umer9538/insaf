@@ -177,19 +177,26 @@ export const createConversation = async (
  */
 export const getConversations = async (userId: string): Promise<Conversation[]> => {
   try {
+    // Simple query - filter and sort client-side to avoid composite index
     const q = query(
       collection(db, CHAT_COLLECTIONS.CONVERSATIONS),
-      where('participantIds', 'array-contains', userId),
-      where('archived', '!=', true),
-      orderBy('archived'),
-      orderBy('updatedAt', 'desc')
+      where('participantIds', 'array-contains', userId)
     );
 
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({
+    const conversations = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
     })) as Conversation[];
+
+    // Filter out archived and sort by updatedAt client-side
+    return conversations
+      .filter(conv => !conv.archived)
+      .sort((a, b) => {
+        const aTime = a.updatedAt?.toMillis?.() || 0;
+        const bTime = b.updatedAt?.toMillis?.() || 0;
+        return bTime - aTime;
+      });
   } catch (error) {
     console.error('Error getting conversations:', error);
     throw error;
@@ -381,22 +388,32 @@ export const subscribeToConversations = (
   callback: (conversations: Conversation[]) => void
 ): Unsubscribe => {
   try {
+    // Simple query - no orderBy to avoid needing composite index
+    // Sorting and filtering done client-side
     const q = query(
       collection(db, CHAT_COLLECTIONS.CONVERSATIONS),
-      where('participantIds', 'array-contains', userId),
-      where('archived', '!=', true),
-      orderBy('archived'),
-      orderBy('updatedAt', 'desc')
+      where('participantIds', 'array-contains', userId)
     );
 
     return onSnapshot(
       q,
       (querySnapshot) => {
-        const conversations = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Conversation[];
-        callback(conversations);
+        const conversations = querySnapshot.docs
+          .map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+          })) as Conversation[];
+
+        // Filter out archived and sort by updatedAt client-side
+        const filtered = conversations
+          .filter(conv => !conv.archived)
+          .sort((a, b) => {
+            const aTime = a.updatedAt?.toMillis?.() || 0;
+            const bTime = b.updatedAt?.toMillis?.() || 0;
+            return bTime - aTime; // Descending (newest first)
+          });
+
+        callback(filtered);
       },
       (error) => {
         console.error('Error in conversation subscription:', error);
