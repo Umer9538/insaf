@@ -27,6 +27,7 @@ interface InputProps extends Omit<TextInputProps, 'style'> {
   onRightIconPress?: () => void;
   containerStyle?: ViewStyle;
   disabled?: boolean;
+  inputStyle?: ViewStyle;
 }
 
 export const Input: React.FC<InputProps> = ({
@@ -38,10 +39,13 @@ export const Input: React.FC<InputProps> = ({
   onRightIconPress,
   containerStyle,
   disabled = false,
+  inputStyle,
   value,
   onFocus,
   onBlur,
   secureTextEntry,
+  multiline,
+  numberOfLines,
   ...props
 }) => {
   const theme = useAppTheme();
@@ -187,7 +191,8 @@ export const Input: React.FC<InputProps> = ({
           {
             backgroundColor: theme.colors.input.background,
             borderRadius: theme.borderRadius.md,
-            height: theme.inputHeight.md,
+            height: multiline ? undefined : theme.inputHeight.md,
+            minHeight: multiline ? (numberOfLines || 3) * 24 + 32 : theme.inputHeight.md,
             borderWidth: 2,
             borderColor,
             transform: [{ translateX }],
@@ -241,7 +246,10 @@ export const Input: React.FC<InputProps> = ({
                 color: theme.colors.text.primary,
                 paddingLeft: leftIcon ? 44 : 16,
                 paddingRight: rightIcon || secureTextEntry ? 44 : 16,
+                paddingTop: multiline ? 28 : undefined,
+                textAlignVertical: multiline ? 'top' : 'center',
               },
+              inputStyle,
             ]}
             value={value}
             onFocus={handleFocus}
@@ -249,6 +257,8 @@ export const Input: React.FC<InputProps> = ({
             editable={!disabled}
             secureTextEntry={actualSecureTextEntry}
             placeholderTextColor={theme.colors.input.placeholder}
+            multiline={multiline}
+            numberOfLines={numberOfLines}
             {...props}
           />
         </View>

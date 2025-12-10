@@ -13,48 +13,64 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import { useAppTheme } from '../../context/ThemeContext';
 import { Text } from '../../components/common/Text';
 import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
+import { useAuth } from '../../context/AuthContext';
+import { createCase, postCase, AreaOfLaw } from '../../services/case.service';
+import { uploadCaseDocument } from '../../services/storage.service';
 
-// Case Categories
-const CATEGORIES = [
-  { id: 'criminal', name: 'Criminal', icon: 'shield' },
-  { id: 'family', name: 'Family', icon: 'people' },
-  { id: 'corporate', name: 'Corporate', icon: 'business' },
-  { id: 'property', name: 'Property', icon: 'home' },
-  { id: 'civil', name: 'Civil', icon: 'document-text' },
-  { id: 'tax', name: 'Tax', icon: 'cash' },
-  { id: 'labor', name: 'Labor', icon: 'briefcase' },
-  { id: 'other', name: 'Other', icon: 'ellipsis-horizontal' },
+// Document interface
+interface UploadedDocument {
+  name: string;
+  size: number;
+  uri: string;
+  mimeType: string;
+  uploading?: boolean;
+  uploadProgress?: number;
+  downloadUrl?: string;
+}
+
+// Case Categories mapped to AreaOfLaw
+const CATEGORIES: { id: AreaOfLaw; name: string; icon: string }[] = [
+  { id: 'CRIMINAL_LAW', name: 'Criminal', icon: 'shield' },
+  { id: 'FAMILY_LAW', name: 'Family', icon: 'people' },
+  { id: 'CORPORATE_LAW', name: 'Corporate', icon: 'business' },
+  { id: 'PROPERTY_LAW', name: 'Property', icon: 'home' },
+  { id: 'CIVIL_LAW', name: 'Civil', icon: 'document-text' },
+  { id: 'TAX_LAW', name: 'Tax', icon: 'cash' },
+  { id: 'LABOR_LAW', name: 'Labor', icon: 'briefcase' },
+  { id: 'OTHER', name: 'Other', icon: 'ellipsis-horizontal' },
 ];
 
 // Urgency Levels
-const URGENCY_LEVELS = [
-  { id: 'low', name: 'Low', description: 'Can wait a few weeks', color: '#4CAF50' },
-  { id: 'medium', name: 'Medium', description: 'Need within 1-2 weeks', color: '#FF9800' },
-  { id: 'high', name: 'High', description: 'Urgent - need ASAP', color: '#EF4444' },
+const URGENCY_LEVELS: { id: 'NORMAL' | 'URGENT'; name: string; description: string; color: string }[] = [
+  { id: 'NORMAL', name: 'Normal', description: 'Standard timeline, can wait', color: '#4CAF50' },
+  { id: 'URGENT', name: 'Urgent', description: 'Need immediate attention', color: '#EF4444' },
 ];
 
 export const CreateCaseScreen: React.FC = () => {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const { user } = useAuth();
 
   // Form State
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState<string | null>(null);
-  const [urgency, setUrgency] = useState<string>('medium');
+  const [category, setCategory] = useState<AreaOfLaw | null>(null);
+  const [urgency, setUrgency] = useState<'NORMAL' | 'URGENT'>('NORMAL');
   const [budget, setBudget] = useState('');
-  const [documents, setDocuments] = useState<string[]>([]);
+  const [documents, setDocuments] = useState<UploadedDocument[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -93,25 +109,112 @@ export const CreateCaseScreen: React.FC = () => {
       return;
     }
 
+    if (!user) {
+      Alert.alert('Error', 'You must be logged in to create a case.');
+      return;
+    }
+
     setIsLoading(true);
     try {
-      // TODO: Submit case to Firebase
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      // Create case in Firebase
+      const budgetAmount = Number(budget);
+      const caseId = await createCase(user.uid, {
+        title: title.trim(),
+        description: description.trim(),
+        areaOfLaw: category!,
+        serviceType: 'FULL_CASE_HANDLING',
+        budgetMin: budgetAmount,
+        budgetMax: budgetAmount * 1.5, // Allow bids up to 50% above budget
+        urgency: urgency,
+        location: 'Pakistan', // Default location
+      });
+
+      // Upload documents if any
+      if (documents.length > 0) {
+        const uploadPromises = documents.map(async (doc) => {
+          try {
+            const response = await fetch(doc.uri);
+            const blob = await response.blob();
+            const downloadUrl = await uploadCaseDocument(caseId, blob, doc.name);
+            return { name: doc.name, url: downloadUrl, size: doc.size };
+          } catch (uploadError) {
+            console.error(`Error uploading ${doc.name}:`, uploadError);
+            return null;
+          }
+        });
+
+        const uploadedDocs = await Promise.all(uploadPromises);
+        const successfulUploads = uploadedDocs.filter((d) => d !== null);
+        console.log(`Uploaded ${successfulUploads.length} of ${documents.length} documents`);
+      }
+
+      // Post the case immediately (make it visible for bidding)
+      await postCase(caseId);
+
       Alert.alert(
         'Case Created!',
-        'Your case has been submitted successfully. Lawyers will start bidding soon.',
+        documents.length > 0
+          ? `Your case has been submitted with ${documents.length} document(s). Lawyers will start bidding soon.`
+          : 'Your case has been submitted successfully. Lawyers will start bidding soon.',
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     } catch (error) {
+      console.error('Error creating case:', error);
       Alert.alert('Error', 'Failed to create case. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleAddDocument = () => {
-    // TODO: Implement document picker
-    Alert.alert('Coming Soon', 'Document upload will be available soon.');
+  const handleAddDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'image/*', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        copyToCacheDirectory: true,
+        multiple: true,
+      });
+
+      if (result.canceled) return;
+
+      // Add new documents to the list
+      const newDocs: UploadedDocument[] = result.assets.map((asset) => ({
+        name: asset.name,
+        size: asset.size || 0,
+        uri: asset.uri,
+        mimeType: asset.mimeType || 'application/octet-stream',
+        uploading: false,
+      }));
+
+      // Check file size (max 10MB)
+      const oversizedDocs = newDocs.filter((doc) => doc.size > 10 * 1024 * 1024);
+      if (oversizedDocs.length > 0) {
+        Alert.alert('File Too Large', 'Some files exceed the 10MB limit and were not added.');
+        const validDocs = newDocs.filter((doc) => doc.size <= 10 * 1024 * 1024);
+        setDocuments([...documents, ...validDocs]);
+      } else {
+        setDocuments([...documents, ...newDocs]);
+      }
+    } catch (error) {
+      console.error('Error picking document:', error);
+      Alert.alert('Error', 'Failed to pick document. Please try again.');
+    }
+  };
+
+  const handleRemoveDocument = (index: number) => {
+    setDocuments(documents.filter((_, i) => i !== index));
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const getFileIcon = (mimeType: string) => {
+    if (mimeType.includes('pdf')) return 'document-text';
+    if (mimeType.includes('image')) return 'image';
+    if (mimeType.includes('word')) return 'document';
+    return 'document-outline';
   };
 
   return (
@@ -214,7 +317,6 @@ export const CreateCaseScreen: React.FC = () => {
               placeholder="Describe your legal issue in detail. Include relevant dates, parties involved, and desired outcome."
               multiline
               numberOfLines={5}
-              style={{ minHeight: 120, textAlignVertical: 'top' }}
               maxLength={1000}
             />
             <Text variant="caption" color="tertiary" style={styles.charCount}>
@@ -278,11 +380,46 @@ export const CreateCaseScreen: React.FC = () => {
             <Text variant="labelMedium" color="primary" style={styles.label}>
               Supporting Documents (Optional)
             </Text>
+
+            {/* Display selected documents */}
+            {documents.length > 0 && (
+              <View style={styles.documentsList}>
+                {documents.map((doc, index) => (
+                  <View
+                    key={`${doc.name}-${index}`}
+                    style={[styles.documentItem, { backgroundColor: theme.colors.surface.primary }]}
+                  >
+                    <View style={[styles.docIconContainer, { backgroundColor: `${theme.colors.brand.primary}15` }]}>
+                      <Ionicons
+                        name={getFileIcon(doc.mimeType) as any}
+                        size={24}
+                        color={theme.colors.brand.primary}
+                      />
+                    </View>
+                    <View style={styles.docDetails}>
+                      <Text variant="labelSmall" color="primary" numberOfLines={1}>
+                        {doc.name}
+                      </Text>
+                      <Text variant="caption" color="tertiary">
+                        {formatFileSize(doc.size)}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.removeDocButton}
+                      onPress={() => handleRemoveDocument(index)}
+                    >
+                      <Ionicons name="close-circle" size={22} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+
             <Card style={styles.documentsCard}>
               <TouchableOpacity style={styles.uploadArea} onPress={handleAddDocument}>
                 <Ionicons name="cloud-upload-outline" size={40} color={theme.colors.text.tertiary} />
                 <Text variant="labelMedium" color="secondary" style={{ marginTop: 12 }}>
-                  Tap to upload documents
+                  {documents.length > 0 ? 'Add more documents' : 'Tap to upload documents'}
                 </Text>
                 <Text variant="caption" color="tertiary" style={{ marginTop: 4 }}>
                   PDF, DOC, JPG up to 10MB
@@ -405,6 +542,35 @@ const styles = StyleSheet.create({
   termsText: {
     textAlign: 'center',
     marginTop: 16,
+  },
+  documentsList: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  documentItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  docIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  docDetails: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  removeDocButton: {
+    padding: 4,
   },
 });
 
