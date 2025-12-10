@@ -236,14 +236,20 @@ export const bookConsultation = async (
   lawyerAvatar?: string,
   clientAvatar?: string
 ): Promise<string> => {
-  // Verify slot is still available
-  const slots = await getAvailableSlots(lawyerId, scheduledDate);
-  const timeString = scheduledDate.toTimeString().slice(0, 5);
-  const slot = slots.find(s => s.startTime === timeString);
+  // Check if lawyer has availability configured
+  const availability = await getLawyerAvailability(lawyerId);
 
-  if (!slot || !slot.available) {
-    throw new Error('This time slot is no longer available');
+  if (availability) {
+    // Verify slot is still available only if lawyer has set up availability
+    const slots = await getAvailableSlots(lawyerId, scheduledDate);
+    const timeString = scheduledDate.toTimeString().slice(0, 5);
+    const slot = slots.find(s => s.startTime === timeString);
+
+    if (!slot || !slot.available) {
+      throw new Error('This time slot is no longer available');
+    }
   }
+  // If no availability configured, allow booking - lawyer will confirm/reject
 
   // Create chat conversation for the consultation
   const conversationId = await createConversation(
