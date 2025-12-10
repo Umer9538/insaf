@@ -8,6 +8,7 @@ import {
 } from './firestore.service';
 import { updateCaseStatus, getCaseById } from './case.service';
 import { incrementCompletedCases } from './lawyer.service';
+import { createCaseThread } from './caseThread.service';
 
 // Escrow status from PRD
 export type EscrowStatus =
@@ -96,6 +97,28 @@ export const fundEscrow = async (
 
   // Update case status to IN_PROGRESS
   await updateCaseStatus(caseId, 'IN_PROGRESS');
+
+  // Create Case Thread automatically when case moves to IN_PROGRESS
+  try {
+    const caseDetails = await getCaseById(caseId);
+    const escrow = await getEscrowByCaseId(caseId);
+
+    if (caseDetails && escrow) {
+      await createCaseThread(
+        caseId,
+        caseDetails.title,
+        caseDetails.caseNumber || `CASE-${caseId.slice(0, 8).toUpperCase()}`,
+        caseDetails.clientId,
+        caseDetails.clientName || 'Client',
+        escrow.lawyerId,
+        caseDetails.assignedLawyerName || 'Lawyer'
+      );
+      console.log('Case Thread created for case:', caseId);
+    }
+  } catch (error) {
+    console.error('Error creating case thread:', error);
+    // Don't throw - thread creation failure shouldn't block escrow funding
+  }
 };
 
 // Lawyer confirms case clear
