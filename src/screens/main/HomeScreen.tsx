@@ -4,7 +4,7 @@
  * Main dashboard with quick actions and overview
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -13,39 +13,53 @@ import {
   Dimensions,
   RefreshControl,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { Text } from '../../components/common/Text';
 import { Card } from '../../components/common/Card';
+import { getClientCases, Case } from '../../services/case.service';
+import { getVerifiedLawyers, LawyerProfile } from '../../services/lawyer.service';
+import { subscribeToConversations } from '../../services/chat.service';
+import { formatDistanceToNow } from 'date-fns';
 
 const { width } = Dimensions.get('window');
 
 // Quick Action Data
 const QUICK_ACTIONS = [
-  { id: '1', icon: 'search', title: 'Find Lawyer', color: '#4CAF50', route: 'Lawyers' },
+  { id: '1', icon: 'search', title: 'Find Lawyer', color: '#4CAF50', route: 'LawyersTab' },
   { id: '2', icon: 'add-circle', title: 'New Case', color: '#2196F3', route: 'CreateCase' },
-  { id: '3', icon: 'chatbubbles', title: 'Messages', color: '#9C27B0', route: 'Chat' },
+  { id: '3', icon: 'chatbubbles', title: 'Messages', color: '#9C27B0', route: 'ChatTab' },
   { id: '4', icon: 'school', title: 'Law Coach', color: '#FF9800', route: 'LawCoach' },
 ];
 
-// Stats Data
-const STATS = [
-  { id: '1', label: 'Active Cases', value: '3', icon: 'briefcase' },
-  { id: '2', label: 'Pending Bids', value: '7', icon: 'hand-left' },
-  { id: '3', label: 'Messages', value: '12', icon: 'mail' },
-];
+// Display case type
+interface DisplayCase {
+  id: string;
+  caseNumber: string;
+  title: string;
+  description: string;
+  status: string;
+  lawyerName?: string;
+  bidsCount: number;
+  updatedAt: string;
+}
 
 export const HomeScreen: React.FC = () => {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const { user } = useAuth();
-  const [refreshing, setRefreshing] = React.useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState({ activeCases: 0, pendingBids: 0, unreadMessages: 0 });
+  const [recentCases, setRecentCases] = useState<DisplayCase[]>([]);
+  const [topLawyers, setTopLawyers] = useState<LawyerProfile[]>([]);
 
   // Animated values
   const headerAnim = useRef(new Animated.Value(0)).current;
@@ -54,6 +68,76 @@ export const HomeScreen: React.FC = () => {
   const recentCasesAnim = useRef(new Animated.Value(0)).current;
   const lawyersAnim = useRef(new Animated.Value(0)).current;
   const promoAnim = useRef(new Animated.Value(0)).current;
+
+  // Fetch dashboard data
+  const fetchData = useCallback(async (showLoader = true) => {
+    if (!user) return;
+
+    if (showLoader) setIsLoading(true);
+    try {
+      // Fetch cases
+      const cases = await getClientCases(user.uid);
+
+      // Calculate stats
+      const activeCases = cases.filter(c =>
+        ['ASSIGNED', 'IN_PROGRESS', 'active'].includes(c.status)
+      ).length;
+      const pendingBids = cases.filter(c =>
+        ['POSTED', 'BIDDING', 'bidding'].includes(c.status)
+      ).reduce((acc, c) => acc + (c.bidCount || 0), 0);
+
+      setStats(prev => ({ ...prev, activeCases, pendingBids }));
+
+      // Get recent cases (top 3)
+      const displayCases: DisplayCase[] = cases.slice(0, 3).map(c => ({
+        id: c.id || '',
+        caseNumber: c.caseNumber,
+        title: c.title,
+        description: c.description,
+        status: c.status,
+        lawyerName: undefined, // Will need to fetch if assigned
+        bidsCount: c.bidCount || 0,
+        updatedAt: c.updatedAt?.toDate ? formatDistanceToNow(c.updatedAt.toDate(), { addSuffix: true }) : 'Recently',
+      }));
+      setRecentCases(displayCases);
+
+      // Fetch top lawyers
+      const lawyers = await getVerifiedLawyers(true);
+      // Sort by rating and take top 5
+      const sortedLawyers = lawyers
+        .sort((a, b) => (b.averageRating || 0) - (a.averageRating || 0))
+        .slice(0, 5);
+      setTopLawyers(sortedLawyers);
+
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
+    }
+  }, [user]);
+
+  // Subscribe to unread messages count
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubscribe = subscribeToConversations(user.uid, (conversations) => {
+      const unreadCount = conversations.reduce((acc, conv) => {
+        const unread = conv.unreadCount?.[user.uid] || 0;
+        return acc + unread;
+      }, 0);
+      setStats(prev => ({ ...prev, unreadMessages: unreadCount }));
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Fetch on focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [fetchData])
+  );
 
   useEffect(() => {
     Animated.stagger(100, [
@@ -90,10 +174,10 @@ export const HomeScreen: React.FC = () => {
     ]).start();
   }, []);
 
-  const onRefresh = React.useCallback(() => {
+  const onRefresh = useCallback(() => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1500);
-  }, []);
+    fetchData(false);
+  }, [fetchData]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -165,13 +249,21 @@ export const HomeScreen: React.FC = () => {
             }
           ]}
         >
-          {STATS.map((stat, index) => (
-            <View key={stat.id} style={styles.statCard}>
-              <Ionicons name={stat.icon as any} size={20} color="#d4af37" />
-              <Text variant="h3" style={styles.statValue}>{stat.value}</Text>
-              <Text variant="caption" style={styles.statLabel}>{stat.label}</Text>
-            </View>
-          ))}
+          <View style={styles.statCard}>
+            <Ionicons name="briefcase" size={20} color="#d4af37" />
+            <Text variant="h3" style={styles.statValue}>{stats.activeCases}</Text>
+            <Text variant="caption" style={styles.statLabel}>Active Cases</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Ionicons name="hand-left" size={20} color="#d4af37" />
+            <Text variant="h3" style={styles.statValue}>{stats.pendingBids}</Text>
+            <Text variant="caption" style={styles.statLabel}>Pending Bids</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Ionicons name="mail" size={20} color="#d4af37" />
+            <Text variant="h3" style={styles.statValue}>{stats.unreadMessages}</Text>
+            <Text variant="caption" style={styles.statLabel}>Messages</Text>
+          </View>
         </Animated.View>
       </LinearGradient>
 
@@ -235,56 +327,74 @@ export const HomeScreen: React.FC = () => {
         >
           <View style={styles.sectionHeader}>
             <Text variant="h4" color="primary">Recent Cases</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Cases')}>
+            <TouchableOpacity onPress={() => navigation.navigate('CasesTab')}>
               <Text variant="labelMedium" color="link">View All</Text>
             </TouchableOpacity>
           </View>
 
-          <Card variant="elevated" style={styles.caseCard}>
-            <View style={styles.caseHeader}>
-              <View style={[styles.caseStatus, { backgroundColor: '#4CAF5020' }]}>
-                <Text variant="caption" style={{ color: '#4CAF50' }}>Active</Text>
+          {recentCases.length === 0 ? (
+            <Card variant="elevated" style={styles.caseCard}>
+              <View style={styles.emptyState}>
+                <Ionicons name="briefcase-outline" size={40} color={theme.colors.text.tertiary} />
+                <Text variant="bodySmall" color="secondary" style={{ marginTop: 8, textAlign: 'center' }}>
+                  No cases yet. Create your first case to get started!
+                </Text>
+                <TouchableOpacity
+                  style={[styles.createCaseButton, { backgroundColor: theme.colors.brand.primary }]}
+                  onPress={() => navigation.navigate('CreateCase')}
+                >
+                  <Text variant="labelSmall" style={{ color: '#fff' }}>Create Case</Text>
+                </TouchableOpacity>
               </View>
-              <Text variant="caption" color="secondary">Case #INS-2024-001</Text>
-            </View>
-            <Text variant="h4" color="primary" style={styles.caseTitle}>
-              Property Dispute Resolution
-            </Text>
-            <Text variant="bodySmall" color="secondary" numberOfLines={2}>
-              Land ownership dispute in Lahore. Seeking legal representation for property claim.
-            </Text>
-            <View style={styles.caseFooter}>
-              <View style={styles.lawyerInfo}>
-                <View style={styles.lawyerAvatar}>
-                  <Ionicons name="person" size={16} color="#fff" />
-                </View>
-                <Text variant="labelSmall" color="secondary">Adv. Ahmad Khan</Text>
-              </View>
-              <Text variant="caption" color="secondary">Updated 2h ago</Text>
-            </View>
-          </Card>
+            </Card>
+          ) : (
+            recentCases.map((caseItem) => {
+              const isActive = ['ASSIGNED', 'IN_PROGRESS', 'active'].includes(caseItem.status);
+              const isBidding = ['POSTED', 'BIDDING', 'bidding'].includes(caseItem.status);
+              const statusColor = isActive ? '#4CAF50' : isBidding ? '#FF9800' : '#757575';
+              const statusLabel = isActive ? 'Active' : isBidding ? 'Accepting Bids' : caseItem.status;
 
-          <Card variant="elevated" style={styles.caseCard}>
-            <View style={styles.caseHeader}>
-              <View style={[styles.caseStatus, { backgroundColor: '#FF980020' }]}>
-                <Text variant="caption" style={{ color: '#FF9800' }}>Pending Bids</Text>
-              </View>
-              <Text variant="caption" color="secondary">Case #INS-2024-002</Text>
-            </View>
-            <Text variant="h4" color="primary" style={styles.caseTitle}>
-              Corporate Contract Review
-            </Text>
-            <Text variant="bodySmall" color="secondary" numberOfLines={2}>
-              Need lawyer to review and negotiate business partnership agreement terms.
-            </Text>
-            <View style={styles.caseFooter}>
-              <View style={styles.bidInfo}>
-                <Ionicons name="hand-left" size={14} color={theme.colors.brand.primary} />
-                <Text variant="labelSmall" color="brand">5 bids received</Text>
-              </View>
-              <Text variant="caption" color="secondary">Posted 1d ago</Text>
-            </View>
-          </Card>
+              return (
+                <TouchableOpacity
+                  key={caseItem.id}
+                  onPress={() => navigation.navigate('CaseDetail', { caseId: caseItem.id })}
+                >
+                  <Card variant="elevated" style={styles.caseCard}>
+                    <View style={styles.caseHeader}>
+                      <View style={[styles.caseStatus, { backgroundColor: `${statusColor}20` }]}>
+                        <Text variant="caption" style={{ color: statusColor }}>{statusLabel}</Text>
+                      </View>
+                      <Text variant="caption" color="secondary">Case #{caseItem.caseNumber}</Text>
+                    </View>
+                    <Text variant="h4" color="primary" style={styles.caseTitle}>
+                      {caseItem.title}
+                    </Text>
+                    <Text variant="bodySmall" color="secondary" numberOfLines={2}>
+                      {caseItem.description}
+                    </Text>
+                    <View style={styles.caseFooter}>
+                      {caseItem.lawyerName ? (
+                        <View style={styles.lawyerInfo}>
+                          <View style={styles.lawyerAvatar}>
+                            <Ionicons name="person" size={16} color="#fff" />
+                          </View>
+                          <Text variant="labelSmall" color="secondary">{caseItem.lawyerName}</Text>
+                        </View>
+                      ) : caseItem.bidsCount > 0 ? (
+                        <View style={styles.bidInfo}>
+                          <Ionicons name="hand-left" size={14} color={theme.colors.brand.primary} />
+                          <Text variant="labelSmall" color="brand">{caseItem.bidsCount} bids received</Text>
+                        </View>
+                      ) : (
+                        <Text variant="caption" color="tertiary">No bids yet</Text>
+                      )}
+                      <Text variant="caption" color="secondary">{caseItem.updatedAt}</Text>
+                    </View>
+                  </Card>
+                </TouchableOpacity>
+              );
+            })
+          )}
         </Animated.View>
 
         {/* Featured Lawyers */}
@@ -301,41 +411,48 @@ export const HomeScreen: React.FC = () => {
         >
           <View style={styles.sectionHeader}>
             <Text variant="h4" color="primary">Top Lawyers</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Lawyers')}>
+            <TouchableOpacity onPress={() => navigation.navigate('LawyersTab')}>
               <Text variant="labelMedium" color="link">View All</Text>
             </TouchableOpacity>
           </View>
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.lawyersScroll}
-          >
-            {[1, 2, 3].map((_, index) => (
-              <TouchableOpacity
-                key={index}
-                style={[styles.lawyerCard, { backgroundColor: theme.colors.surface.primary }]}
-                activeOpacity={0.7}
-              >
-                <LinearGradient
-                  colors={['#1a365d', '#2d4a7c']}
-                  style={styles.lawyerImage}
+          {topLawyers.length === 0 ? (
+            <View style={styles.emptyLawyers}>
+              <Text variant="bodySmall" color="tertiary">Loading lawyers...</Text>
+            </View>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.lawyersScroll}
+            >
+              {topLawyers.map((lawyer) => (
+                <TouchableOpacity
+                  key={lawyer.id}
+                  style={[styles.lawyerCard, { backgroundColor: theme.colors.surface.primary }]}
+                  activeOpacity={0.7}
+                  onPress={() => navigation.navigate('LawyerDetail', { lawyerId: lawyer.id })}
                 >
-                  <Ionicons name="person" size={32} color="#d4af37" />
-                </LinearGradient>
-                <Text variant="labelLarge" color="primary" style={styles.lawyerName}>
-                  Adv. {['Ahmad Khan', 'Sara Ali', 'Imran Shah'][index]}
-                </Text>
-                <Text variant="caption" color="secondary">
-                  {['Criminal Law', 'Family Law', 'Corporate Law'][index]}
-                </Text>
-                <View style={styles.ratingContainer}>
-                  <Ionicons name="star" size={12} color="#d4af37" />
-                  <Text variant="caption" color="secondary"> {['4.9', '4.8', '4.7'][index]}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+                  <LinearGradient
+                    colors={['#1a365d', '#2d4a7c']}
+                    style={styles.lawyerImage}
+                  >
+                    <Ionicons name="person" size={32} color="#d4af37" />
+                  </LinearGradient>
+                  <Text variant="labelLarge" color="primary" style={styles.lawyerName} numberOfLines={1}>
+                    {lawyer.fullName}
+                  </Text>
+                  <Text variant="caption" color="secondary" numberOfLines={1}>
+                    {lawyer.primarySpecialization?.replace(/_/g, ' ') || 'General Practice'}
+                  </Text>
+                  <View style={styles.ratingContainer}>
+                    <Ionicons name="star" size={12} color="#d4af37" />
+                    <Text variant="caption" color="secondary"> {lawyer.averageRating?.toFixed(1) || '0.0'}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
         </Animated.View>
 
         {/* Law Coach Promo */}
@@ -540,6 +657,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  createCaseButton: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  emptyLawyers: {
+    padding: 20,
+    alignItems: 'center',
   },
   lawyersScroll: {
     paddingRight: 20,

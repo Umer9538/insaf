@@ -59,7 +59,8 @@ export const LawyersScreen: React.FC = () => {
       console.log('Fetching lawyers for category:', activeCategory);
       let data: LawyerProfile[] = [];
       if (activeCategory === 'all') {
-        data = await getVerifiedLawyers();
+        // Pass true to include all lawyers for testing (change to false for production)
+        data = await getVerifiedLawyers(true);
       } else {
         data = await searchLawyersBySpecialization(activeCategory as any);
       }

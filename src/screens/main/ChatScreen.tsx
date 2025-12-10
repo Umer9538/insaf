@@ -4,7 +4,7 @@
  * View and manage conversations with lawyers
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -12,78 +12,108 @@ import {
   TouchableOpacity,
   TextInput,
   Animated,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../context/ThemeContext';
 import { Text } from '../../components/common/Text';
+import { useAuth } from '../../context/AuthContext';
+import {
+  subscribeToConversations,
+  Conversation,
+} from '../../services/chat.service';
+import { formatDistanceToNow } from 'date-fns';
 
-// Sample Conversations Data
-const CONVERSATIONS = [
-  {
-    id: '1',
-    name: 'Adv. Ahmad Khan',
-    avatar: null,
-    lastMessage: 'I have reviewed your case documents. Let me share my thoughts...',
-    time: '2 min ago',
-    unread: 3,
-    online: true,
-    caseTitle: 'Property Dispute',
-  },
-  {
-    id: '2',
-    name: 'Adv. Sara Ali',
-    avatar: null,
-    lastMessage: 'The hearing has been scheduled for next Monday.',
-    time: '1 hour ago',
-    unread: 0,
-    online: true,
-    caseTitle: 'Family Custody',
-  },
-  {
-    id: '3',
-    name: 'Adv. Imran Shah',
-    avatar: null,
-    lastMessage: 'Please send me the updated contract draft.',
-    time: '3 hours ago',
-    unread: 1,
-    online: false,
-    caseTitle: 'Corporate Contract',
-  },
-  {
-    id: '4',
-    name: 'Adv. Fatima Zahra',
-    avatar: null,
-    lastMessage: 'Thank you for your prompt payment. Case closed successfully.',
-    time: 'Yesterday',
-    unread: 0,
-    online: false,
-    caseTitle: 'Land Transfer',
-  },
-  {
-    id: '5',
-    name: 'INSAF Support',
-    avatar: null,
-    lastMessage: 'Welcome to INSAF! How can we help you today?',
-    time: '2 days ago',
-    unread: 0,
-    online: true,
-    caseTitle: null,
-  },
-];
+type FilterType = 'all' | 'unread' | 'lawyers' | 'support';
+
+interface DisplayConversation {
+  id: string;
+  name: string;
+  avatar: string | null;
+  lastMessage: string;
+  time: string;
+  unread: number;
+  online: boolean;
+  caseTitle: string | null;
+  otherParticipantRole: 'client' | 'lawyer' | 'corporate' | null;
+  conversationType: 'direct' | 'group' | 'case';
+  isSupport: boolean;
+}
 
 export const ChatScreen: React.FC = () => {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
+  const [conversations, setConversations] = useState<DisplayConversation[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeFilter, setActiveFilter] = useState<FilterType>('all');
 
   // Animated values
   const headerAnim = useRef(new Animated.Value(0)).current;
   const searchAnim = useRef(new Animated.Value(0)).current;
   const filtersAnim = useRef(new Animated.Value(0)).current;
+
+  // Transform Firestore conversation to display format
+  const transformConversation = useCallback((conv: Conversation): DisplayConversation => {
+    // Find the other participant (not the current user)
+    const otherParticipant = conv.participants.find(p => p.userId !== user?.uid);
+    const currentUserParticipant = conv.participants.find(p => p.userId === user?.uid);
+
+    // Format the time
+    let timeDisplay = '';
+    if (conv.lastMessage?.createdAt) {
+      try {
+        const date = conv.lastMessage.createdAt.toDate();
+        timeDisplay = formatDistanceToNow(date, { addSuffix: true });
+      } catch {
+        timeDisplay = '';
+      }
+    }
+
+    // Check if this is a support conversation
+    const isSupport = otherParticipant?.userName?.toLowerCase().includes('support') ||
+                      conv.title?.toLowerCase().includes('support') ||
+                      otherParticipant?.userName === 'INSAF Support';
+
+    return {
+      id: conv.id,
+      name: otherParticipant?.userName || conv.title || 'Unknown',
+      avatar: otherParticipant?.userAvatar || null,
+      lastMessage: conv.lastMessage?.text || 'No messages yet',
+      time: timeDisplay,
+      unread: currentUserParticipant?.unreadCount || 0,
+      online: false, // TODO: Implement presence system
+      caseTitle: conv.caseId ? 'Case Discussion' : null,
+      otherParticipantRole: otherParticipant?.userRole || null,
+      conversationType: conv.type,
+      isSupport,
+    };
+  }, [user?.uid]);
+
+  // Subscribe to conversations
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.uid) {
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      const unsubscribe = subscribeToConversations(user.uid, (convs) => {
+        const displayConvs = convs.map(transformConversation);
+        setConversations(displayConvs);
+        setIsLoading(false);
+      });
+
+      return () => unsubscribe();
+    }, [user?.uid, transformConversation])
+  );
 
   useEffect(() => {
     Animated.stagger(100, [
@@ -105,14 +135,54 @@ export const ChatScreen: React.FC = () => {
     ]).start();
   }, []);
 
-  const filteredConversations = CONVERSATIONS.filter(conv =>
-    conv.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    conv.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Apply filters
+  const filteredConversations = conversations.filter(conv => {
+    // Apply search filter first
+    const matchesSearch = searchQuery === '' ||
+      conv.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      conv.lastMessage.toLowerCase().includes(searchQuery.toLowerCase());
 
-  const totalUnread = CONVERSATIONS.reduce((sum, conv) => sum + conv.unread, 0);
+    if (!matchesSearch) return false;
 
-  const renderConversation = ({ item, index }: { item: typeof CONVERSATIONS[0]; index: number }) => (
+    // Apply category filter
+    switch (activeFilter) {
+      case 'unread':
+        return conv.unread > 0;
+      case 'lawyers':
+        return conv.otherParticipantRole === 'lawyer' && !conv.isSupport;
+      case 'support':
+        return conv.isSupport;
+      case 'all':
+      default:
+        return true;
+    }
+  });
+
+  // Handle compose button press
+  const handleCompose = () => {
+    Alert.alert(
+      'New Conversation',
+      'Who would you like to message?',
+      [
+        {
+          text: 'Find a Lawyer',
+          onPress: () => navigation.navigate('LawyersTab'),
+        },
+        {
+          text: 'Contact Support',
+          onPress: () => {
+            // Could create a support conversation here
+            Alert.alert('Support', 'Support chat will be available soon.');
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const totalUnread = conversations.reduce((sum, conv) => sum + conv.unread, 0);
+
+  const renderConversation = ({ item, index }: { item: DisplayConversation; index: number }) => (
     <View>
       <TouchableOpacity
         style={[styles.conversationCard, { backgroundColor: theme.colors.surface.primary }]}
@@ -207,7 +277,7 @@ export const ChatScreen: React.FC = () => {
               {totalUnread > 0 ? `${totalUnread} unread messages` : 'All caught up!'}
             </Text>
           </View>
-          <TouchableOpacity style={styles.composeButton}>
+          <TouchableOpacity style={styles.composeButton} onPress={handleCompose}>
             <Ionicons name="create-outline" size={24} color="#1a365d" />
           </TouchableOpacity>
         </Animated.View>
@@ -254,18 +324,35 @@ export const ChatScreen: React.FC = () => {
           }
         ]}
       >
-        <TouchableOpacity style={[styles.filterChip, { backgroundColor: theme.colors.brand.primary }]}>
-          <Text variant="labelSmall" style={{ color: '#FFFFFF' }}>All</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.filterChip, { backgroundColor: theme.colors.surface.secondary }]}>
-          <Text variant="labelSmall" color="secondary">Unread</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.filterChip, { backgroundColor: theme.colors.surface.secondary }]}>
-          <Text variant="labelSmall" color="secondary">Lawyers</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.filterChip, { backgroundColor: theme.colors.surface.secondary }]}>
-          <Text variant="labelSmall" color="secondary">Support</Text>
-        </TouchableOpacity>
+        {([
+          { key: 'all', label: 'All' },
+          { key: 'unread', label: 'Unread' },
+          { key: 'lawyers', label: 'Lawyers' },
+          { key: 'support', label: 'Support' },
+        ] as { key: FilterType; label: string }[]).map((filter) => (
+          <TouchableOpacity
+            key={filter.key}
+            style={[
+              styles.filterChip,
+              {
+                backgroundColor: activeFilter === filter.key
+                  ? theme.colors.brand.primary
+                  : theme.colors.surface.secondary,
+              },
+            ]}
+            onPress={() => setActiveFilter(filter.key)}
+          >
+            <Text
+              variant="labelSmall"
+              style={{
+                color: activeFilter === filter.key ? '#FFFFFF' : theme.colors.text.secondary,
+              }}
+            >
+              {filter.label}
+              {filter.key === 'unread' && totalUnread > 0 && ` (${totalUnread})`}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </Animated.View>
 
       {/* Conversations List */}
@@ -276,15 +363,42 @@ export const ChatScreen: React.FC = () => {
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="chatbubbles-outline" size={64} color={theme.colors.text.tertiary} />
-            <Text variant="h4" color="secondary" style={styles.emptyTitle}>
-              No conversations yet
-            </Text>
-            <Text variant="bodySmall" color="tertiary" style={styles.emptyText}>
-              Start by finding a lawyer or creating a case
-            </Text>
-          </View>
+          isLoading ? (
+            <View style={styles.emptyContainer}>
+              <ActivityIndicator size="large" color={theme.colors.brand.primary} />
+              <Text variant="bodySmall" color="secondary" style={{ marginTop: 16 }}>
+                Loading conversations...
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Ionicons
+                name={activeFilter === 'unread' ? 'checkmark-done-outline' : 'chatbubbles-outline'}
+                size={64}
+                color={theme.colors.text.tertiary}
+              />
+              <Text variant="h4" color="secondary" style={styles.emptyTitle}>
+                {activeFilter === 'all' && 'No conversations yet'}
+                {activeFilter === 'unread' && 'All caught up!'}
+                {activeFilter === 'lawyers' && 'No lawyer conversations'}
+                {activeFilter === 'support' && 'No support conversations'}
+              </Text>
+              <Text variant="bodySmall" color="tertiary" style={styles.emptyText}>
+                {activeFilter === 'all' && 'Start by finding a lawyer or creating a case'}
+                {activeFilter === 'unread' && 'You have no unread messages'}
+                {activeFilter === 'lawyers' && 'Find a lawyer to start a conversation'}
+                {activeFilter === 'support' && 'Contact support if you need help'}
+              </Text>
+              {activeFilter === 'all' && (
+                <TouchableOpacity
+                  style={[styles.emptyButton, { backgroundColor: theme.colors.brand.primary }]}
+                  onPress={() => navigation.navigate('LawyersTab')}
+                >
+                  <Text variant="labelMedium" style={{ color: '#FFFFFF' }}>Find a Lawyer</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )
         }
       />
     </View>
@@ -433,6 +547,12 @@ const styles = StyleSheet.create({
   emptyText: {
     textAlign: 'center',
     marginTop: 8,
+  },
+  emptyButton: {
+    marginTop: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
   },
 });
 

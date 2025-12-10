@@ -4,7 +4,7 @@
  * Manage and view all legal cases
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -12,74 +12,35 @@ import {
   TouchableOpacity,
   Dimensions,
   Animated,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../context/ThemeContext';
 import { Text } from '../../components/common/Text';
+import { useAuth } from '../../context/AuthContext';
+import { getClientCases, Case, CaseStatus } from '../../services/case.service';
+import { formatDistanceToNow } from 'date-fns';
 
 const { width } = Dimensions.get('window');
 
-// Case Status Types
-type CaseStatus = 'active' | 'pending' | 'bidding' | 'completed' | 'closed';
-
-// Sample Cases Data
-const CASES = [
-  {
-    id: '1',
-    caseNumber: 'INS-2024-001',
-    title: 'Property Dispute Resolution',
-    description: 'Land ownership dispute in Lahore regarding inherited property rights.',
-    status: 'active' as CaseStatus,
-    category: 'Property Law',
-    lawyer: 'Adv. Ahmad Khan',
-    createdAt: '2024-01-15',
-    updatedAt: '2 hours ago',
-    bidsCount: 0,
-    budget: 50000,
-  },
-  {
-    id: '2',
-    caseNumber: 'INS-2024-002',
-    title: 'Corporate Contract Review',
-    description: 'Need lawyer to review and negotiate business partnership agreement terms.',
-    status: 'bidding' as CaseStatus,
-    category: 'Corporate Law',
-    lawyer: null,
-    createdAt: '2024-01-20',
-    updatedAt: '1 day ago',
-    bidsCount: 5,
-    budget: 30000,
-  },
-  {
-    id: '3',
-    caseNumber: 'INS-2024-003',
-    title: 'Family Custody Matter',
-    description: 'Child custody arrangement after separation. Need experienced family lawyer.',
-    status: 'pending' as CaseStatus,
-    category: 'Family Law',
-    lawyer: null,
-    createdAt: '2024-01-22',
-    updatedAt: '3 days ago',
-    bidsCount: 8,
-    budget: 40000,
-  },
-  {
-    id: '4',
-    caseNumber: 'INS-2023-089',
-    title: 'Criminal Defense Case',
-    description: 'Defense representation for fraud allegations.',
-    status: 'completed' as CaseStatus,
-    category: 'Criminal Law',
-    lawyer: 'Adv. Bilal Ahmed',
-    createdAt: '2023-11-10',
-    updatedAt: '2 weeks ago',
-    bidsCount: 0,
-    budget: 80000,
-  },
-];
+// Display case interface
+interface DisplayCase {
+  id: string;
+  caseNumber: string;
+  title: string;
+  description: string;
+  status: string;
+  category: string;
+  lawyer: string | null;
+  createdAt: string;
+  updatedAt: string;
+  bidsCount: number;
+  budget: number;
+}
 
 const TABS = [
   { id: 'all', label: 'All' },
@@ -114,12 +75,61 @@ export const CasesScreen: React.FC = () => {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('all');
+  const [cases, setCases] = useState<DisplayCase[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Animated values
   const headerAnim = useRef(new Animated.Value(0)).current;
   const statsAnim = useRef(new Animated.Value(0)).current;
   const tabsAnim = useRef(new Animated.Value(0)).current;
+
+  // Fetch cases from Firebase
+  const fetchCases = useCallback(async (showLoader = true) => {
+    if (!user) return;
+
+    if (showLoader) setIsLoading(true);
+    try {
+      const fetchedCases = await getClientCases(user.uid);
+
+      // Transform to DisplayCase format
+      const displayCases: DisplayCase[] = fetchedCases.map((c: Case) => ({
+        id: c.id,
+        caseNumber: c.caseNumber || `CASE-${c.id.slice(0, 6).toUpperCase()}`,
+        title: c.title,
+        description: c.description,
+        status: c.status,
+        category: c.areaOfLaw.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase()),
+        lawyer: c.assignedLawyerId || null,
+        createdAt: c.createdAt?.toDate ? formatDistanceToNow(c.createdAt.toDate(), { addSuffix: true }) : 'Recently',
+        updatedAt: c.updatedAt?.toDate ? formatDistanceToNow(c.updatedAt.toDate(), { addSuffix: true }) : 'Recently',
+        bidsCount: c.bidCount || 0,
+        budget: c.budgetMin || 0,
+      }));
+
+      setCases(displayCases);
+    } catch (error) {
+      console.error('Error fetching cases:', error);
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
+    }
+  }, [user]);
+
+  // Fetch on focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchCases();
+    }, [fetchCases])
+  );
+
+  // Handle refresh
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchCases(false);
+  }, [fetchCases]);
 
   useEffect(() => {
     Animated.stagger(100, [
@@ -142,11 +152,11 @@ export const CasesScreen: React.FC = () => {
   }, []);
 
   const filteredCases = activeTab === 'all'
-    ? CASES
-    : CASES.filter(c => c.status === activeTab);
+    ? cases
+    : cases.filter(c => c.status === activeTab);
 
-  const renderCaseCard = ({ item, index }: { item: typeof CASES[0]; index: number }) => {
-    const statusColor = getStatusColor(item.status);
+  const renderCaseCard = ({ item, index }: { item: DisplayCase; index: number }) => {
+    const statusColor = getStatusColor(item.status as CaseStatus);
 
     return (
       <View>
@@ -260,17 +270,17 @@ export const CasesScreen: React.FC = () => {
           ]}
         >
           <View style={styles.statItem}>
-            <Text variant="h3" style={styles.statValue}>{CASES.filter(c => c.status === 'active').length}</Text>
+            <Text variant="h3" style={styles.statValue}>{cases.filter(c => c.status === 'active').length}</Text>
             <Text variant="caption" style={styles.statLabel}>Active</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text variant="h3" style={styles.statValue}>{CASES.filter(c => c.status === 'bidding').length}</Text>
+            <Text variant="h3" style={styles.statValue}>{cases.filter(c => c.status === 'bidding').length}</Text>
             <Text variant="caption" style={styles.statLabel}>Bidding</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text variant="h3" style={styles.statValue}>{CASES.filter(c => c.status === 'completed').length}</Text>
+            <Text variant="h3" style={styles.statValue}>{cases.filter(c => c.status === 'completed').length}</Text>
             <Text variant="caption" style={styles.statLabel}>Completed</Text>
           </View>
         </Animated.View>
@@ -311,12 +321,28 @@ export const CasesScreen: React.FC = () => {
       </Animated.View>
 
       {/* Cases List */}
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.brand.primary} />
+          <Text variant="bodySmall" color="secondary" style={{ marginTop: 12 }}>
+            Loading your cases...
+          </Text>
+        </View>
+      ) : (
       <FlatList
         data={filteredCases}
         keyExtractor={(item) => item.id}
         renderItem={renderCaseCard}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.colors.brand.primary}
+            colors={[theme.colors.brand.primary]}
+          />
+        }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Ionicons name="folder-open-outline" size={64} color={theme.colors.text.tertiary} />
@@ -343,6 +369,7 @@ export const CasesScreen: React.FC = () => {
           </View>
         }
       />
+      )}
     </View>
   );
 };
@@ -483,6 +510,12 @@ const styles = StyleSheet.create({
   bidsInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 60,
   },
   emptyContainer: {
     alignItems: 'center',
